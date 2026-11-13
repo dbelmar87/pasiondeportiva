@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { publishArticle, rejectArticle, createManualArticle } from "./action";
+import { publishArticle, rejectArticle, createManualArticle } from "./actions";
 
 interface AdminPageProps {
   searchParams: Promise<{ pass?: string }>;

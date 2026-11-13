@@ -3,13 +3,15 @@
 import { createClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 
-// Cliente con permisos totales (solo corre en el servidor)
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export async function publishArticle(id: string, updatedTitle: string) {
+  const supabaseAdmin = getSupabaseAdmin();
   await supabaseAdmin
     .from("articles")
     .update({
@@ -23,6 +25,7 @@ export async function publishArticle(id: string, updatedTitle: string) {
 }
 
 export async function rejectArticle(id: string) {
+  const supabaseAdmin = getSupabaseAdmin();
   await supabaseAdmin
     .from("articles")
     .update({ status: "rejected" })
@@ -32,12 +35,12 @@ export async function rejectArticle(id: string) {
 }
 
 export async function createManualArticle(formData: FormData) {
+  const supabaseAdmin = getSupabaseAdmin();
   const title = formData.get("title") as string;
   const sport = formData.get("sport") as string;
   const section = formData.get("section") as string;
   const content = formData.get("content") as string;
 
-  // Generamos un slug limpio para la URL
   const slug = title
     .toLowerCase()
     .normalize("NFD")
@@ -45,7 +48,6 @@ export async function createManualArticle(formData: FormData) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)+/g, "");
 
-  // Usamos nuestro generador de portadas sin copyright como imagen por defecto
   const coverImage = `/api/og?title=${encodeURIComponent(title)}&sport=${encodeURIComponent(sport)}&tag=${encodeURIComponent(section)}`;
 
   await supabaseAdmin.from("articles").insert({
