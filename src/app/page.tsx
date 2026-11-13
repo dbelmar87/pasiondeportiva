@@ -3,10 +3,6 @@ import { createClient } from "@supabase/supabase-js";
 import { cacheLife } from "next/cache";
 import WeeklyPoll from "@/components/WeeklyPoll";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-);
 
 interface Article {
   id: string;
@@ -23,6 +19,12 @@ interface Article {
 async function getPublishedArticles(): Promise<Article[]> {
   "use cache";
   cacheLife("minutes");
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+  );
+  
 
   const { data } = await supabase
     .from("articles")

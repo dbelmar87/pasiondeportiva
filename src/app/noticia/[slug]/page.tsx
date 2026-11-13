@@ -4,14 +4,15 @@ import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import WeeklyPoll from "@/components/WeeklyPoll";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-);
 
 async function ArticleContent({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+  );
+  
   const { data: article } = await supabase
     .from("articles")
     .select("*")
