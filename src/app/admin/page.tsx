@@ -1,20 +1,12 @@
+import { Suspense } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { publishArticle, rejectArticle, createManualArticle } from "./action";
-
-export async function GET(request: Request) {
-  // ✅ Ponlas aquí adentro de GET:
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
 
 interface AdminPageProps {
   searchParams: Promise<{ pass?: string }>;
 }
 
-export default async function AdminPage({ searchParams }: AdminPageProps) {
+async function AdminContent({ searchParams }: AdminPageProps) {
   const { pass } = await searchParams;
 
   // Protección simple por contraseña en la URL mientras trabajas solo
@@ -45,6 +37,11 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       </div>
     );
   }
+
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
 
   // Obtener noticias pendientes de revisión (borradores de la IA)
   const { data: drafts } = await supabaseAdmin
@@ -198,5 +195,19 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         </section>
       </div>
     </div>
+  );
+}
+
+export default function AdminPage({ searchParams }: AdminPageProps) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-slate-100 text-sm text-slate-600">
+          Cargando panel de administración...
+        </div>
+      }
+    >
+      <AdminContent searchParams={searchParams} />
+    </Suspense>
   );
 }

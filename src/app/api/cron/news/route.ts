@@ -2,15 +2,6 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "@supabase/supabase-js";
 
-export async function GET(request: Request) {
-    // ✅ Ponlas aquí adentro de GET:
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-  
-
 function normalizeText(text: string) {
   return text
     .toLowerCase()
@@ -18,7 +9,6 @@ function normalizeText(text: string) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-// Palabras clave para filtrar (Chilenos, Selección, Superestrellas y Tenis)
 const KEYWORDS = [
   "tabilo", "jarry", "garin", "barrios", "alexis", "sanchez", "brereton",
   "osorio", "maripan", "suazo", "pulgar", "vidal", "alcaraz", "sinner",
@@ -28,8 +18,7 @@ const KEYWORDS = [
   "argentina", "brasil", "messi", "vinicius", "bellingham"
 ];
 
-// Endpoints JSON oficiales y abiertos (no devuelven HTML ni requieren XML)
-const HOST = "site.api.espn.com";
+const HOST = "://espn.com";
 const PATH = "apis/site/v2/sports";
 const ESPN_BASE = `https://${HOST}/${PATH}`;
 
@@ -48,8 +37,6 @@ const NEWS_SOURCES = [
   },
 ];
 
-
-
 interface EspnArticle {
   headline?: string;
   description?: string;
@@ -60,27 +47,26 @@ interface EspnArticle {
   };
 }
 
-// 1. Solo modelos Flash de respuesta rápida (2 a 4 segundos)
-async function generateSafeContent(prompt: string) {
-    const modelsToTry = [
-        "gemini-3.8-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-3.6-flash",
-      ];
-    let lastError: unknown;
-  
-    for (const modelName of modelsToTry) {
-      try {
-        const model = genAI.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent(prompt);
-        return result.response.text();
-      } catch (err) {
-        lastError = err;
-      }
+async function generateSafeContent(prompt: string, apiKey: string) {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const modelsToTry = [
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+  ];
+  let lastError: unknown;
+
+  for (const modelName of modelsToTry) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      return result.response.text();
+    } catch (err) {
+      lastError = err;
     }
-    throw lastError;
   }
-  
+  throw lastError;
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -94,11 +80,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   let createdCount = 0;
   let scannedCount = 0;
   const errors: string[] = [];
-
-  const model = genAI.getGenerativeModel({ model: "gemini-3.8-flash" });
 
   for (const source of NEWS_SOURCES) {
     if (createdCount >= 1) {
@@ -127,7 +116,6 @@ export async function GET(request: Request) {
           continue;
         }
 
-        // Evitar duplicados en Supabase
         const { data: existing } = await supabaseAdmin
           .from("articles")
           .select("id")
@@ -156,7 +144,10 @@ export async function GET(request: Request) {
           Nota: En "section" usa solo uno de estos tres valores exactos: "chilenos", "superestrellas" o "torneos".
         `;
 
-        const responseText = await generateSafeContent(prompt);
+        const responseText = await generateSafeContent(
+          prompt,
+          process.env.GEMINI_API_KEY!
+        );
         const rawText = responseText.replace(/```json|```/g, "").trim();
         const aiData = JSON.parse(rawText);
 
