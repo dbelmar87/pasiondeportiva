@@ -1,0 +1,64 @@
+"use server";
+
+import { createClient } from "@supabase/supabase-js";
+import { revalidatePath } from "next/cache";
+
+// Cliente con permisos totales (solo corre en el servidor)
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export async function publishArticle(id: string, updatedTitle: string) {
+  await supabaseAdmin
+    .from("articles")
+    .update({
+      title: updatedTitle,
+      status: "published",
+    })
+    .eq("id", id);
+
+  revalidatePath("/admin");
+  revalidatePath("/");
+}
+
+export async function rejectArticle(id: string) {
+  await supabaseAdmin
+    .from("articles")
+    .update({ status: "rejected" })
+    .eq("id", id);
+
+  revalidatePath("/admin");
+}
+
+export async function createManualArticle(formData: FormData) {
+  const title = formData.get("title") as string;
+  const sport = formData.get("sport") as string;
+  const section = formData.get("section") as string;
+  const content = formData.get("content") as string;
+
+  // Generamos un slug limpio para la URL
+  const slug = title
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
+
+  // Usamos nuestro generador de portadas sin copyright como imagen por defecto
+  const coverImage = `/api/og?title=${encodeURIComponent(title)}&sport=${encodeURIComponent(sport)}&tag=${encodeURIComponent(section)}`;
+
+  await supabaseAdmin.from("articles").insert({
+    title,
+    slug: `${slug}-${Date.now().toString().slice(-4)}`,
+    content,
+    sport,
+    section,
+    cover_image: coverImage,
+    status: "published",
+    featured: true,
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/");
+}
