@@ -1,10 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { publishArticle, rejectArticle, createManualArticle } from "./action";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+export async function GET(request: Request) {
+  // ✅ Ponlas aquí adentro de GET:
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
 
 interface AdminPageProps {
   searchParams: Promise<{ pass?: string }>;
