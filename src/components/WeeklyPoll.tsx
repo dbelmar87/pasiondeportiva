@@ -16,12 +16,12 @@ export default function WeeklyPoll() {
   const [votedId, setVotedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL || "https://supabase.co";
+  const supabaseKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "placeholder-key";
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-  );
-  
+  const supabase = createBrowserClient(supabaseUrl, supabaseKey);
 
   useEffect(() => {
     const savedVote = localStorage.getItem("pd_weekly_vote");
@@ -38,7 +38,7 @@ export default function WeeklyPoll() {
     }
 
     fetchCandidates();
-  }, [supabase]);
+  }, []);
 
   const handleVote = async (candidate: Candidate) => {
     if (votedId) return;

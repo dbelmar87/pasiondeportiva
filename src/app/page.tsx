@@ -15,16 +15,18 @@ interface Article {
   created_at: string;
 }
 
-// Función cacheada: resuelve el error de Next.js 16 y acelera la carga
 async function getPublishedArticles(): Promise<Article[]> {
   "use cache";
   cacheLife("minutes");
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-  );
-  
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return [];
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseKey);
 
   const { data } = await supabase
     .from("articles")
@@ -35,6 +37,7 @@ async function getPublishedArticles(): Promise<Article[]> {
 
   return data || [];
 }
+
 
 export default async function HomePage() {
   const articles = await getPublishedArticles();
