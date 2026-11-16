@@ -3,6 +3,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 
+
 function getSupabaseAdmin() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -64,3 +65,25 @@ export async function createManualArticle(formData: FormData) {
   revalidatePath("/admin");
   revalidatePath("/");
 }
+
+export async function deleteReportedComment(commentId: string) {
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+  await supabaseAdmin.from("article_comments").delete().eq("id", commentId);
+  revalidatePath("/admin");
+}
+
+export async function dismissCommentReport(reportId: string) {
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+  await supabaseAdmin
+    .from("comment_reports")
+    .update({ status: "dismissed" })
+    .eq("id", reportId);
+  revalidatePath("/admin");
+}
+

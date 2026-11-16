@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { cacheLife } from "next/cache";
 import WeeklyPoll from "@/components/WeeklyPoll";
+import Navbar from "@/components/Navbar/Navbar";
 
 
 interface Article {
@@ -46,38 +47,7 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
-          <Link href="/" className="flex items-center gap-2.5">
-            <span className="rounded-xl bg-red-600 px-2.5 py-1 text-lg font-black text-white">
-              PD
-            </span>
-            <span className="text-xl font-extrabold tracking-tight text-slate-900">
-              Pasión Deportiva
-            </span>
-          </Link>
-
-          <nav className="hidden gap-6 text-sm font-semibold text-slate-600 md:flex">
-            <Link href="/" className="text-slate-900 hover:text-red-600">
-              Portada
-            </Link>
-            <Link href="#chilenos" className="hover:text-red-600">
-              Chilenos por el Mundo
-            </Link>
-            <Link href="#tenis" className="hover:text-red-600">
-              Tenis ATP
-            </Link>
-            <Link href="#superestrellas" className="hover:text-red-600">
-              Superestrellas
-            </Link>
-          </nav>
-
-          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
-            ● EN VIVO
-          </span>
-        </div>
-      </header>
-
+      <Navbar/>
       <main className="mx-auto max-w-7xl px-4 py-8">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
           <div className="space-y-8 lg:col-span-8">
