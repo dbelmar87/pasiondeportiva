@@ -18,7 +18,9 @@ const KEYWORDS = [
   "argentina", "brasil", "messi", "vinicius", "bellingham"
 ];
 
-const ESPN_BASE = "https://espn.com";
+const HOST = "://espn.com";
+const PATH = "apis/site/v2/sports";
+const ESPN_BASE = `https://${HOST}/${PATH}`;
 
 const NEWS_SOURCES = [
   {
@@ -48,17 +50,15 @@ interface EspnArticle {
 async function generateSafeContent(prompt: string, apiKey: string) {
   const genAI = new GoogleGenerativeAI(apiKey);
   const modelsToTry = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
   ];
   let lastError: unknown;
 
   for (const modelName of modelsToTry) {
     try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: { responseMimeType: "application/json" },
-      });
+      const model = genAI.getGenerativeModel({ model: modelName });
       const result = await model.generateContent(prompt);
       return result.response.text();
     } catch (err) {
