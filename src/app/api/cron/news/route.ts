@@ -18,7 +18,11 @@ const KEYWORDS = [
   "argentina", "brasil", "messi", "vinicius", "bellingham"
 ];
 
-const ESPN_BASE = "https://espn.com";
+// 1. Subdominio completo para que no se corte al pegar
+const SUBDOMAIN = "site.api";
+const DOMAIN = "espn.com";
+const PATH = "apis/site/v2/sports";
+const ESPN_BASE = `https://${SUBDOMAIN}.${DOMAIN}/${PATH}`;
 
 const NEWS_SOURCES = [
   {
@@ -45,20 +49,19 @@ interface EspnArticle {
   };
 }
 
+// 2. Modelos Flash rápidos vigentes e inicialización segura dentro de la función
 async function generateSafeContent(prompt: string, apiKey: string) {
   const genAI = new GoogleGenerativeAI(apiKey);
   const modelsToTry = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
   ];
   let lastError: unknown;
 
   for (const modelName of modelsToTry) {
     try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: { responseMimeType: "application/json" },
-      });
+      const model = genAI.getGenerativeModel({ model: modelName });
       const result = await model.generateContent(prompt);
       return result.response.text();
     } catch (err) {
@@ -139,6 +142,7 @@ export async function GET(request: Request) {
           {
             "title": "Titular atractivo, claro y sin humo en español (máximo 85 caracteres)",
             "section": "chilenos",
+            "tags": ["Equipo o Jugador Principal", "Deporte"],
             "content": "Cuerpo de la noticia en 3 párrafos cortos, claros y directos en español."
           }
           Nota: En "section" usa solo uno de estos tres valores exactos: "chilenos", "superestrellas" o "torneos".
@@ -168,6 +172,7 @@ export async function GET(request: Request) {
           content: aiData.content,
           sport: source.sport,
           section: finalSection,
+          tags: Array.isArray(aiData.tags) ? aiData.tags : [],
           cover_image: coverImage,
           source_url: link,
           status: "draft",
