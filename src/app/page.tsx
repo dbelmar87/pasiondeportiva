@@ -4,7 +4,6 @@ import { cacheLife } from "next/cache";
 import WeeklyPoll from "@/components/WeeklyPoll";
 import Navbar from "@/components/Navbar/Navbar";
 
-
 interface Article {
   id: string;
   title: string;
@@ -39,6 +38,17 @@ async function getPublishedArticles(): Promise<Article[]> {
   return data || [];
 }
 
+function getArticleCoverUrl(article: Article): string {
+  if (article.cover_image) {
+    return article.cover_image;
+  }
+  const params = new URLSearchParams({
+    title: article.title,
+    sport: article.sport || "football",
+    tag: article.section || "noticias",
+  });
+  return `/api/og?${params.toString()}`;
+}
 
 export default async function HomePage() {
   const articles = await getPublishedArticles();
@@ -47,7 +57,7 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Navbar/>
+      <Navbar />
       <main className="mx-auto max-w-7xl px-4 py-8">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
           <div className="space-y-8 lg:col-span-8">
@@ -55,8 +65,11 @@ export default async function HomePage() {
               <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
                 <Link href={`/noticia/${featuredArticle.slug}`}>
                   <div className="relative aspect-[1200/630] w-full bg-slate-900">
-                  <img src={featuredArticle.cover_image || `/api/og?title=${encodeURIComponent(featuredArticle.title)}&sport=${featuredArticle.sport}&tag=${featuredArticle.section}`}
-                  alt={featuredArticle.title} className="h-full w-full object-cover"/>
+                    <img
+                      src={getArticleCoverUrl(featuredArticle)}
+                      alt={featuredArticle.title}
+                      className="h-full w-full object-cover"
+                    />
                   </div>
                   <div className="p-6 sm:p-8">
                     <div className="mb-3 flex items-center gap-2">
@@ -94,11 +107,16 @@ export default async function HomePage() {
                   {restArticles.map((article: Article) => (
                     <article
                       key={article.id}
-                      className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
+                      className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
+                    >
                       <Link href={`/noticia/${article.slug}`} className="flex flex-1 flex-col">
                         <div className="aspect-[1200/630] w-full bg-slate-900">
-                        <img src={featuredArticle.cover_image || `/api/og?title=${encodeURIComponent(featuredArticle.title)}&sport=${featuredArticle.sport}&tag=${featuredArticle.section}`}
-                        alt={featuredArticle.title} className="h-full w-full object-cover"/>
+                          <img
+                            src={getArticleCoverUrl(article)}
+                            alt={article.title}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
                         </div>
                         <div className="flex flex-1 flex-col justify-between p-5">
                           <div>
