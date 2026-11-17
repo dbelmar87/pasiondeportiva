@@ -1,26 +1,117 @@
 import { Suspense } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import { cacheLife } from "next/cache";
 import WeeklyPoll from "@/components/WeeklyPoll";
 import ArticleComments from "@/components/ArticleComments";
 import Navbar from "@/components/Navbar/Navbar";
 
-async function ArticleContent({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+interface Article {
+  id: string;
+  title: string;
+  slug: string;
+  content: string;
+  sport: string;
+  section: string;
+  cover_image: string | null;
+  created_at: string;
+}
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+async function getArticleBySlug(slug: string): Promise<Article | null> {
+  "use cache";
+  cacheLife("minutes");
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  const { data: article } = await supabase
+  if (!supabaseUrl || !supabaseKey) {
+    return null;
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  const { data } = await supabase
     .from("articles")
     .select("*")
     .eq("slug", slug)
     .eq("status", "published")
     .single();
+
+  return data || null;
+}
+
+function getArticleCoverUrl(article: Article): string {
+  if (article.cover_image) {
+    return article.cover_image;
+  }
+  const params = new URLSearchParams({
+    title: article.title,
+    sport: article.sport || "football",
+    tag: article.section || "noticias",
+  });
+  return `/api/og?${params.toString()}`;
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const article = await getArticleBySlug(slug);
+
+  if (!article) {
+    return {
+      title: "Noticia no encontrada",
+      description: "El artículo solicitado no está disponible en Pasión Deportiva.",
+    };
+  }
+
+  const cleanDescription = article.content
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 155)
+    .concat(article.content.length > 155 ? "..." : "");
+
+  const ogImageUrl = getArticleCoverUrl(article);
+
+  return {
+    title: article.title,
+    description: cleanDescription,
+    openGraph: {
+      type: "article",
+      locale: "es_CL",
+      siteName: "Pasión Deportiva",
+      url: `/noticia/${article.slug}`,
+      title: article.title,
+      description: cleanDescription,
+      publishedTime: article.created_at,
+      section: article.section,
+      images: [
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          alt: article.title,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: article.title,
+      description: cleanDescription,
+      images: [ogImageUrl],
+    },
+  };
+}
+
+async function ArticleContent({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const article = await getArticleBySlug(slug);
 
   if (!article) {
     notFound();
@@ -46,14 +137,9 @@ async function ArticleContent({ params }: { params: Promise<{ slug: string }> })
           {article.title}
         </h1>
 
-        <div className="mb-6 overflow-hidden rounded-2xl bg-slate-900">
+        <div className="mb-6 aspect-[1200/630] overflow-hidden rounded-2xl bg-slate-900">
           <img
-            src={
-              article.cover_image ||
-              `/api/og?title=${encodeURIComponent(article.title)}&sport=${
-                article.sport
-              }&tag=${article.section}`
-            }
+            src={getArticleCoverUrl(article)}
             alt={article.title}
             className="h-full w-full object-cover"
           />

@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase-browser";
 import TeamAutocomplete from "./TeamAutocomplete";
+import { FAN_AVATARS, FanAvatar } from "./FanAvatar";
 
 export interface FanProfileData {
   id: string;
   nickname: string;
+  avatar_id?: string | null;
   favorite_teams: string[];
   favorite_player: string;
   memorable_match: string;
@@ -33,6 +35,13 @@ export default function FanCardForm({
   const supabase = createClient();
 
   const [nickname, setNickname] = useState(initialData?.nickname || "");
+  const [avatarId, setAvatarId] = useState(
+    initialData?.avatar_id || "escudo-roja"
+  );
+  const [avatarTab, setAvatarTab] = useState<
+    "escudos" | "deportistas" | "personajes"
+  >("escudos");
+
   const [favoriteTeam, setFavoriteTeam] = useState(
     initialData?.favorite_teams?.[0] || ""
   );
@@ -57,9 +66,20 @@ export default function FanCardForm({
     setError("");
     setSaving(true);
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setError("Tu sesión aún no está activa. Revisa si confirmaste tu correo o vuelve a iniciar sesión.");
+      setSaving(false);
+      return;
+    }
+
     const payload = {
-      id: userId,
+      id: user.id,
       nickname: nickname.trim(),
+      avatar_id: avatarId,
       favorite_teams: favoriteTeam ? [favoriteTeam.trim()] : [],
       favorite_player: favoritePlayer.trim(),
       memorable_match: memorableMatch.trim(),
@@ -69,10 +89,10 @@ export default function FanCardForm({
 
     const { error: upsertError } = await supabase
       .from("fan_profiles")
-      .upsert(payload);
+      .upsert(payload, { onConflict: "id" });
 
     if (upsertError) {
-      setError("No se pudo guardar tu carnet. Intenta nuevamente.");
+      setError(`No se pudo guardar: ${upsertError.message}`);
     } else {
       onSaved();
     }
@@ -80,19 +100,80 @@ export default function FanCardForm({
     setSaving(false);
   }
 
+  const filteredAvatars = FAN_AVATARS.filter((a) => a.category === avatarTab);
+
   return (
     <div className="mx-auto max-w-2xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-      <h2 className="mb-1 text-2xl font-extrabold text-slate-900">
-        {initialData ? "Edita tu Carnet de Hincha" : "Personaliza tu Carnet de Hincha"}
-      </h2>
-      <p className="mb-6 text-sm text-slate-600">
-        Completa estos datos para activar tu voz en la comunidad y recibir alertas de tus favoritos.
-      </p>
+      <div className="mb-6 flex items-center gap-4">
+        <FanAvatar avatarId={avatarId} nickname={nickname || "PD"} size="lg" />
+        <div>
+          <h2 className="text-2xl font-extrabold text-slate-900">
+            {initialData ? "Editar Perfil de Hincha" : "Crea tu Carnet de Hincha"}
+          </h2>
+          <p className="text-sm text-slate-600">
+            Elige tu avatar, tu camiseta y personaliza tus alertas.
+          </p>
+        </div>
+      </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Selector de Avatar sin subir fotos */}
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
+              1. Elige tu Avatar de Perfil
+            </label>
+            <div className="flex rounded-lg bg-slate-200/80 p-0.5 text-xs font-bold">
+              {(
+                [
+                  { key: "escudos", label: "🛡️ Escudos" },
+                  { key: "deportistas", label: "⚽ Deportistas" },
+                  { key: "personajes", label: "🎬 Personajes" },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setAvatarTab(tab.key)}
+                  className={`rounded-md px-2.5 py-1 transition ${
+                    avatarTab === tab.key
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+            {filteredAvatars.map((item) => {
+              const selected = avatarId === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setAvatarId(item.id)}
+                  className={`flex flex-col items-center gap-1.5 rounded-xl border-2 p-2 text-center transition ${
+                    selected
+                      ? "border-red-600 bg-red-50/60 shadow-sm"
+                      : "border-transparent bg-white hover:border-slate-300"
+                  }`}
+                >
+                  <FanAvatar avatarId={item.id} size="sm" />
+                  <span className="line-clamp-1 text-[10px] font-bold text-slate-700">
+                    {item.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div>
           <label className="mb-1 block text-xs font-bold text-slate-700">
-            1. Tu Apodo o Nickname en la comunidad *
+            2. Tu Apodo o Nickname en la comunidad *
           </label>
           <input
             type="text"
@@ -107,7 +188,7 @@ export default function FanCardForm({
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TeamAutocomplete
-            label="2. Tu Equipo Favorito *"
+            label="3. Tu Equipo Favorito *"
             placeholder="Busca Colo-Colo, Real Madrid..."
             type="team"
             value={favoriteTeam}
@@ -115,7 +196,7 @@ export default function FanCardForm({
           />
 
           <TeamAutocomplete
-            label="3. Tu Jugador o Tenista Favorito"
+            label="4. Tu Jugador o Tenista Favorito"
             placeholder="Busca Tabilo, Alexis, Alcaraz..."
             type="player"
             value={favoritePlayer}
@@ -125,7 +206,7 @@ export default function FanCardForm({
 
         <div>
           <label className="mb-1 block text-xs font-bold text-slate-700">
-            4. El partido que más recuerdas
+            5. El partido que más recuerdas
           </label>
           <input
             type="text"
@@ -140,7 +221,7 @@ export default function FanCardForm({
         {/* Preferencias de Notificaciones */}
         <div className="space-y-3 rounded-2xl bg-slate-50 p-4">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-700">
-            5. Notificaciones Inteligentes
+            6. Notificaciones Inteligentes
           </p>
 
           <label className="flex cursor-pointer items-center justify-between">

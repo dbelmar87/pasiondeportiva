@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase-browser";
 import { FanProfileData } from "./FanCardForm";
+import { FanAvatar } from "./FanAvatar";
 
 interface FanDigitalCardProps {
   profile: FanProfileData;
@@ -53,19 +54,31 @@ export default function FanDigitalCard({
 
           {profile.verification_status === "verified" ? (
             <span className="rounded-full bg-blue-500/20 px-2.5 py-0.5 text-[11px] font-bold text-blue-300">
-              ✓ Identidad Verificada
+              ✓ Verificado
             </span>
           ) : (
             <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-bold text-emerald-300">
-              ● Activo en Comunidad
+              ● Activo
             </span>
           )}
         </div>
 
-        <h2 className="mb-1 text-2xl font-black">{profile.nickname}</h2>
-        <p className="mb-5 text-sm font-semibold text-red-400">
-          Hincha de {profile.favorite_teams?.[0] || "Sin equipo"}
-        </p>
+        {/* Avatar + Identidad */}
+        <div className="mb-5 flex items-center gap-4">
+          <FanAvatar
+            avatarId={profile.avatar_id}
+            nickname={profile.nickname}
+            size="md"
+          />
+          <div>
+            <h2 className="text-xl font-black leading-tight sm:text-2xl">
+              {profile.nickname}
+            </h2>
+            <p className="text-sm font-semibold text-red-400">
+              Hincha de {profile.favorite_teams?.[0] || "Sin equipo"}
+            </p>
+          </div>
+        </div>
 
         <div className="space-y-2.5 border-t border-slate-700/80 pt-4 text-xs">
           {profile.favorite_player && (
@@ -104,7 +117,7 @@ export default function FanDigitalCard({
           onClick={onEdit}
           className="mt-6 w-full rounded-xl bg-white/10 py-2.5 text-xs font-bold text-white transition hover:bg-white/20"
         >
-          Editar carnet o alertas
+          Cambiar avatar o editar carnet
         </button>
       </div>
 
