@@ -314,7 +314,7 @@ export default function HinchaPage() {
                             href={`/noticia/${art.slug}`}
                             className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md sm:flex-row"
                           >
-                            <div className="aspect-[1200/630] w-full shrink-0 bg-slate-900 sm:aspect-auto sm:h-36 sm:w-48">
+                            <div className="aspect-[1200/630] w-full shrink-0 bg-slate-900 sm:w-64">
                               <img
                                 src={getArticleCoverUrl(art)}
                                 alt={art.title}
