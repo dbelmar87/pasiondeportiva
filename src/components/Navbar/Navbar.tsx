@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { Suspense, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
@@ -13,8 +13,19 @@ const NAV_LINKS = [
   { label: "Superestrellas", href: "/?section=superestrellas" },
 ];
 
-export default function Navbar() {
+// 1. Subcomponente que lee la URL dentro de Suspense
+function AdminRouteGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+
+  if (pathname?.startsWith("/admin")) {
+    return null;
+  }
+
+  return <>{children}</>;
+}
+
+// 2. Contenido visual e interactivo del Navbar (prerenderizable)
+function NavbarContent() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [fanLabel, setFanLabel] = useState<string | null>(null);
 
@@ -66,11 +77,6 @@ export default function Navbar() {
 
     return () => subscription.unsubscribe();
   }, [supabase]);
-
-  // Ocultar navbar público dentro de /admin si prefieres mantenerlo limpio
-  if (pathname?.startsWith("/admin")) {
-    return null;
-  }
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
@@ -168,5 +174,16 @@ export default function Navbar() {
         </div>
       )}
     </header>
+  );
+}
+
+// 3. Exportación principal con Suspense
+export default function Navbar() {
+  return (
+    <Suspense fallback={<NavbarContent />}>
+      <AdminRouteGuard>
+        <NavbarContent />
+      </AdminRouteGuard>
+    </Suspense>
   );
 }
