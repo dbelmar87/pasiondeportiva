@@ -36,8 +36,15 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { articleId, userId, authorName, authorTeam, content } = body;
 
+    // 1. Exigir usuario autenticado
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Debes iniciar sesión en Zona del Hincha para comentar." },
+        { status: 401 }
+      );
+    }
+
     const cleanContent = String(content || "").trim();
-    const cleanAuthor = String(authorName || "").trim() || "Hincha Anónimo";
 
     if (!articleId || cleanContent.length < 3) {
       return NextResponse.json(
@@ -53,7 +60,29 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1. Filtro IA de respeto
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    // 2. Verificar que el usuario tenga su Carnet Digital creado en fan_profiles
+    const { data: fanProfile } = await supabaseAdmin
+      .from("fan_profiles")
+      .select("id, nickname, avatar_id, favorite_teams, verification_status")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (!fanProfile) {
+      return NextResponse.json(
+        {
+          error:
+            "Debes crear tu Carnet de Hincha en /hincha para poder comentar.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // 3. Filtro IA de respeto
     const moderation = await moderateCommentWithAI(
       cleanContent,
       process.env.GEMINI_API_KEY!
@@ -71,19 +100,24 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Guardar comentario aprobado en Supabase
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    // 4. Guardar comentario aprobado usando los datos reales del Carnet
+    const verifiedName = (fanProfile.nickname || authorName || "Hincha").slice(
+      0,
+      40
     );
+    const verifiedTeam = (
+      fanProfile.favorite_teams?.[0] ||
+      authorTeam ||
+      ""
+    ).slice(0, 40);
 
     const { data: inserted, error: insertError } = await supabaseAdmin
       .from("article_comments")
       .insert({
         article_id: articleId,
-        user_id: userId || null,
-        author_name: cleanAuthor.slice(0, 40),
-        author_team: authorTeam ? String(authorTeam).slice(0, 40) : null,
+        user_id: userId,
+        author_name: verifiedName,
+        author_team: verifiedTeam || null,
         content: cleanContent,
         status: "approved",
       })
