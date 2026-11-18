@@ -118,8 +118,9 @@ export async function GET(request: NextRequest) {
     });
 
     const endpoint = needsDailySync
-      ? `https://api-sports.io{todayStr}&timezone=America/Santiago`
-      : `https://api-sports.io`;
+    ? `https://api-sports.io{todayStr}&timezone=America/Santiago`
+    : `https://api-sports.io`;
+
 
     const apiRes = await fetch(endpoint, {
       headers: {
