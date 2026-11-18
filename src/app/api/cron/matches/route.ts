@@ -2,21 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const IMPORTANT_LEAGUE_IDS = new Set([
-  265, // Primera División de Chile
-  266, // Primera B Chile
-  267, // Copa Chile
-  13,  // CONMEBOL Libertadores
-  11,  // CONMEBOL Sudamericana
-  34,  // Eliminatorias Sudamericanas
-  1,   // Mundial
-  2,   // UEFA Champions League
-  3,   // UEFA Europa League
-  39,  // Premier League (Inglaterra)
-  140, // La Liga (España)
-  135, // Serie A (Italia)
-  78,  // Bundesliga (Alemania)
-  61,  // Ligue 1 (Francia)
-]);
+    265, // Primera División de Chile
+    266, // Primera B Chile
+    267, // Copa Chile
+    13,  // CONMEBOL Libertadores
+    11,  // CONMEBOL Sudamericana
+    34,  // Eliminatorias Sudamericanas
+    31,  // Eliminatorias CONMEBOL (alt)
+    10,  // Amistosos Internacionales (La Roja)
+    9,   // Copa América
+    1,   // Mundial
+    5,   // UEFA Nations League
+    2,   // UEFA Champions League
+    3,   // UEFA Europa League
+    39,  // Premier League (Inglaterra)
+    140, // La Liga (España)
+    135, // Serie A (Italia)
+    78,  // Bundesliga (Alemania)
+    61,  // Ligue 1 (Francia)
+    71,  // Brasileirão Serie A
+    128, // Liga Profesional Argentina
+  ]);
+  
+
 
 function getTodaySantiago(): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -117,24 +125,32 @@ export async function GET(request: NextRequest) {
       });
     });
 
+    const host = ["v3", "football", "api-sports", "io"].join(".");
+    const baseUrl = `https://${host}/fixtures`;
     const endpoint = needsDailySync
-    ? `https://api-sports.io{todayStr}&timezone=America/Santiago`
-    : `https://api-sports.io`;
+      ? `${baseUrl}?date=${todayStr}&timezone=America/Santiago`
+      : `${baseUrl}?live=all&timezone=America/Santiago`;
+    
+
+  const apiRes = await fetch(endpoint, {
+    headers: {
+      "x-apisports-key": apiKey,
+    },
+    cache: "no-store",
+  });
 
 
-    const apiRes = await fetch(endpoint, {
-      headers: {
-        "x-apisports-key": apiKey,
+  if (!apiRes.ok) {
+    const errorBody = await apiRes.text();
+    return NextResponse.json(
+      {
+        error: `Error HTTP de API-Football: ${apiRes.status}`,
+        details: errorBody,
+        sentDate: todayStr,
       },
-      cache: "no-store",
-    });
-
-    if (!apiRes.ok) {
-      return NextResponse.json(
-        { error: `Error HTTP de API-Football: ${apiRes.status}` },
-        { status: 502 }
-      );
-    }
+      { status: 502 }
+    );
+  }
 
     const apiData = await apiRes.json();
 
@@ -162,6 +178,9 @@ export async function GET(request: NextRequest) {
 
     if (relevantFixtures.length > 0) {
       const rows = relevantFixtures.map((item: any) => ({
+        home_logo: item.teams.home.logo || "",
+        away_logo: item.teams.away.logo || "",
+        league_logo: item.league.logo || "",
         id: item.fixture.id,
         league_id: item.league.id,
         league_name: item.league.name,
@@ -199,8 +218,13 @@ export async function GET(request: NextRequest) {
       totalFetched: fixtures.length,
       savedMatches: relevantFixtures.length,
     });
-  } catch (err: unknown) {
+} catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Error inesperado";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    const cause =
+      err instanceof Error && err.cause
+        ? String((err.cause as any)?.message || err.cause)
+        : undefined;
+    return NextResponse.json({ error: msg, cause }, { status: 500 });
   }
+
 }

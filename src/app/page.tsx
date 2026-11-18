@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { cacheLife } from "next/cache";
 import WeeklyPoll from "@/components/WeeklyPoll";
 import Navbar from "@/components/Navbar/Navbar";
+import TodayMatchesWidget from "@/components/TodayMatchesWidget";
 
 interface Article {
   id: string;
@@ -140,6 +141,7 @@ export default async function HomePage() {
           </div>
 
           <aside className="space-y-6 lg:col-span-4">
+            <TodayMatchesWidget compact />
             <WeeklyPoll />
 
             <div className="rounded-2xl border border-slate-200 bg-slate-900 p-6 text-white">

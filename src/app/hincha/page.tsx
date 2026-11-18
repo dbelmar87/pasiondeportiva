@@ -8,6 +8,7 @@ import FanAuthForm from "@/components/FanAuthForm";
 import FanCardForm, { FanProfileData } from "@/components/FanCardForm";
 import FanDigitalCard from "@/components/FanDigitalCard";
 import { FanAvatar } from "@/components/FanAvatar";
+import TodayMatchesWidget from "@/components/TodayMatchesWidget";
 
 interface Article {
   id: string;
@@ -209,7 +210,10 @@ export default function HinchaPage() {
                     Hola, {profile.nickname}
                   </p>
                   <p className="text-[11px] font-medium text-slate-500">
-                    Panel de Hincha • {profile.favorite_teams?.[0]}
+                    Panel de Hincha •{" "}
+                  {profile.favorite_teams && profile.favorite_teams.length > 0
+                  ? profile.favorite_teams.join(" · ")
+                  : "Sin equipos"}
                   </p>
                 </div>
               </div>
@@ -264,6 +268,7 @@ export default function HinchaPage() {
                   onEdit={() => setActiveTab("editar")}
                   onUpdated={() => loadProfileAndNews(userId)}
                 />
+                <TodayMatchesWidget favoriteTeams={profile.favorite_teams || []} title="Partidos de Hoy (Tus Equipos)" compact />
               </div>
 
               {/* Columna Derecha: Vista dinámica según pestaña */}

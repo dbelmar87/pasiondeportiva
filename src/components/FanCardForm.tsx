@@ -26,6 +26,8 @@ interface FanCardFormProps {
   onCancel?: () => void;
 }
 
+const MAX_TEAMS = 5;
+
 export default function FanCardForm({
   userId,
   initialData,
@@ -42,9 +44,11 @@ export default function FanCardForm({
     "escudos" | "deportistas" | "personajes"
   >("escudos");
 
-  const [favoriteTeam, setFavoriteTeam] = useState(
-    initialData?.favorite_teams?.[0] || ""
+  const [favoriteTeams, setFavoriteTeams] = useState<string[]>(
+    initialData?.favorite_teams?.filter(Boolean) || []
   );
+  const [teamQuery, setTeamQuery] = useState("");
+
   const [favoritePlayer, setFavoritePlayer] = useState(
     initialData?.favorite_player || ""
   );
@@ -61,9 +65,52 @@ export default function FanCardForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  function handleAddTeam(selectedTeam?: string) {
+    const clean = (selectedTeam ?? teamQuery).trim();
+    if (!clean) return;
+
+    const alreadyExists = favoriteTeams.some(
+      (t) => t.toLowerCase() === clean.toLowerCase()
+    );
+    if (alreadyExists) {
+      setTeamQuery("");
+      return;
+    }
+
+    if (favoriteTeams.length >= MAX_TEAMS) {
+      setError(`Puedes elegir hasta ${MAX_TEAMS} equipos favoritos.`);
+      return;
+    }
+
+    setError("");
+    setFavoriteTeams((prev) => [...prev, clean]);
+    setTeamQuery("");
+  }
+
+  function handleRemoveTeam(teamToRemove: string) {
+    setFavoriteTeams((prev) => prev.filter((t) => t !== teamToRemove));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+
+    // Si dejó un equipo escrito en el input sin apretar "Agregar", lo incluimos
+    let finalTeams = [...favoriteTeams];
+    const pendingTeam = teamQuery.trim();
+    if (
+      pendingTeam &&
+      finalTeams.length < MAX_TEAMS &&
+      !finalTeams.some((t) => t.toLowerCase() === pendingTeam.toLowerCase())
+    ) {
+      finalTeams.push(pendingTeam);
+    }
+
+    if (finalTeams.length === 0) {
+      setError("Agrega al menos un equipo favorito para crear tu Carnet.");
+      return;
+    }
+
     setSaving(true);
 
     const {
@@ -71,7 +118,9 @@ export default function FanCardForm({
     } = await supabase.auth.getUser();
 
     if (!user) {
-      setError("Tu sesión aún no está activa. Revisa si confirmaste tu correo o vuelve a iniciar sesión.");
+      setError(
+        "Tu sesión aún no está activa. Revisa si confirmaste tu correo o vuelve a iniciar sesión."
+      );
       setSaving(false);
       return;
     }
@@ -80,7 +129,7 @@ export default function FanCardForm({
       id: user.id,
       nickname: nickname.trim(),
       avatar_id: avatarId,
-      favorite_teams: favoriteTeam ? [favoriteTeam.trim()] : [],
+      favorite_teams: finalTeams,
       favorite_player: favoritePlayer.trim(),
       memorable_match: memorableMatch.trim(),
       notify_news: notifyNews,
@@ -111,13 +160,13 @@ export default function FanCardForm({
             {initialData ? "Editar Perfil de Hincha" : "Crea tu Carnet de Hincha"}
           </h2>
           <p className="text-sm text-slate-600">
-            Elige tu avatar, tu camiseta y personaliza tus alertas.
+            Elige tu avatar, tus camisetas y personaliza tus alertas.
           </p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Selector de Avatar sin subir fotos */}
+        {/* 1. Selector de Avatar sin subir fotos */}
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
@@ -171,6 +220,7 @@ export default function FanCardForm({
           </div>
         </div>
 
+        {/* 2. Apodo */}
         <div>
           <label className="mb-1 block text-xs font-bold text-slate-700">
             2. Tu Apodo o Nickname en la comunidad *
@@ -186,15 +236,71 @@ export default function FanCardForm({
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <TeamAutocomplete
-            label="3. Tu Equipo Favorito *"
-            placeholder="Busca Colo-Colo, Real Madrid..."
-            type="team"
-            value={favoriteTeam}
-            onChange={setFavoriteTeam}
-          />
+        {/* 3. Múltiples Equipos Favoritos */}
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-700">
+              3. Tus Equipos Favoritos * (máx. {MAX_TEAMS})
+            </span>
+            <span className="text-xs font-semibold text-slate-500">
+              {favoriteTeams.length}/{MAX_TEAMS}
+            </span>
+          </div>
 
+          {favoriteTeams.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {favoriteTeams.map((team, idx) => (
+                <span
+                  key={team}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-3 py-1 text-xs font-bold text-white"
+                >
+                  {idx === 0 && (
+                    <span className="rounded bg-red-600 px-1.5 py-0.5 text-[9px] uppercase">
+                      Principal
+                    </span>
+                  )}
+                  <span>{team}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTeam(team)}
+                    aria-label={`Quitar ${team}`}
+                    className="ml-0.5 rounded-full px-1 text-slate-300 hover:bg-slate-700 hover:text-white"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {favoriteTeams.length < MAX_TEAMS && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="flex-1">
+                <TeamAutocomplete
+                  label=""
+                  placeholder="Busca Colo-Colo, U. de Chile, Real Madrid..."
+                  type="team"
+                  value={teamQuery}
+                  onChange={setTeamQuery}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => handleAddTeam()}
+                disabled={!teamQuery.trim()}
+                className="rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                + Agregar equipo
+              </button>
+            </div>
+          )}
+                    <p className="mt-2 text-[11px] text-slate-500">
+            El primer equipo será tu camiseta principal en el Carnet Digital. Todos aparecerán en tu feed y marcadores.
+          </p>
+        </div>
+
+        {/* 4. Jugador o Tenista */}
+        <div>
           <TeamAutocomplete
             label="4. Tu Jugador o Tenista Favorito"
             placeholder="Busca Tabilo, Alexis, Alcaraz..."
@@ -204,6 +310,7 @@ export default function FanCardForm({
           />
         </div>
 
+        {/* 5. Partido memorable */}
         <div>
           <label className="mb-1 block text-xs font-bold text-slate-700">
             5. El partido que más recuerdas
@@ -218,7 +325,7 @@ export default function FanCardForm({
           />
         </div>
 
-        {/* Preferencias de Notificaciones */}
+        {/* 6. Preferencias de Notificaciones */}
         <div className="space-y-3 rounded-2xl bg-slate-50 p-4">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-700">
             6. Notificaciones Inteligentes
@@ -250,29 +357,28 @@ export default function FanCardForm({
         </div>
 
         {error && (
-          <p className="rounded-lg bg-red-50 p-2.5 text-xs font-medium text-red-600">
+          <div className="rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">
             {error}
-          </p>
+          </div>
         )}
 
-        <div className="flex gap-3 pt-2">
-          <button
-            type="submit"
-            disabled={saving || !nickname.trim() || !favoriteTeam.trim()}
-            className="flex-1 rounded-xl bg-slate-900 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-50"
-          >
-            {saving ? "Guardando Carnet..." : "Guardar mi Carnet de Hincha"}
-          </button>
-
+        <div className="flex items-center justify-end gap-3 pt-2">
           {onCancel && (
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50"
+              className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
             >
               Cancelar
             </button>
           )}
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-xl bg-red-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-red-700 disabled:opacity-50"
+          >
+            {saving ? "Guardando..." : "Guardar Carnet"}
+          </button>
         </div>
       </form>
     </div>
