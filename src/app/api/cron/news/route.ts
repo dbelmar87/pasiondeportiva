@@ -100,10 +100,7 @@ const RSS_FEEDS = [
 
 async function generateSafeContent(prompt: string, apiKey: string) {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const modelsToTry = [
-    "gemini-3.5-flash-lite",
-    "gemini-3-flash-preview",
-  ];
+  const modelsToTry = ["gemini-3.5-flash-lite", "gemini-3-flash-preview"];
   let lastError: unknown;
 
   for (const modelName of modelsToTry) {
@@ -138,13 +135,21 @@ export async function GET(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
+  // Rotar feeds según la hora para cubrir fútbol chileno, tenis y superestrellas
+  const offset = new Date().getUTCHours() % RSS_FEEDS.length;
+  const rotatedFeeds = [
+    ...RSS_FEEDS.slice(offset),
+    ...RSS_FEEDS.slice(0, offset),
+  ];
+
   let createdCount = 0;
   let scannedCount = 0;
+  const publishedTitles: string[] = [];
   const errors: string[] = [];
-  const MAX_AGE_MS = 24 * 60 * 60 * 1000; // Últimas 24 horas
+  const MAX_AGE_MS = 8 * 60 * 60 * 1000; // Últimas 8 horas para priorizar primicias
   const now = Date.now();
 
-  for (const feed of RSS_FEEDS) {
+  for (const feed of rotatedFeeds) {
     if (createdCount >= 1) {
       break;
     }
@@ -177,21 +182,18 @@ export async function GET(request: Request) {
           return !Number.isNaN(pubTime) && now - pubTime <= MAX_AGE_MS;
         });
 
-      for (const item of recentItems.slice(0, 12)) {
+      for (const item of recentItems.slice(0, 10)) {
+        if (createdCount >= 1) break;
         scannedCount++;
 
-        // 1. Verificar duplicado por URL
         const { data: existingByUrl } = await supabaseAdmin
           .from("articles")
           .select("id")
           .eq("source_url", item.link)
           .maybeSingle();
 
-        if (existingByUrl) {
-          continue;
-        }
+        if (existingByUrl) continue;
 
-        // 2. Verificar duplicado por titular similar generado hoy
         const slugPrefix = normalizeText(item.title)
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/(^-|-$)+/g, "")
@@ -204,9 +206,7 @@ export async function GET(request: Request) {
             .ilike("slug", `${slugPrefix}%`)
             .maybeSingle();
 
-          if (existingBySlug) {
-            continue;
-          }
+          if (existingBySlug) continue;
         }
 
         const prompt = `
@@ -239,49 +239,66 @@ export async function GET(request: Request) {
         const rawText = responseText.replace(/```json|```/g, "").trim();
         const aiData = JSON.parse(rawText);
 
-        const finalSlug = normalizeText(aiData.title)
+        let finalSlug = normalizeText(aiData.title)
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/(^-|-$)+/g, "");
+
+        const { data: duplicateSlug } = await supabaseAdmin
+          .from("articles")
+          .select("id")
+          .eq("slug", finalSlug)
+          .maybeSingle();
+
+        if (duplicateSlug) {
+          finalSlug = `${finalSlug}-${Date.now().toString().slice(-4)}`;
+        }
 
         const validSections = ["chilenos", "superestrellas", "torneos"];
         const finalSection = validSections.includes(aiData.section)
           ? aiData.section
           : feed.defaultSection;
 
-        const coverImage = `/api/og?title=${encodeURIComponent(aiData.title)}&sport=${encodeURIComponent(feed.sport)}&tag=${encodeURIComponent(finalSection)}`;
+        const coverImage = `/api/og?title=${encodeURIComponent(
+          aiData.title
+        )}&sport=${encodeURIComponent(feed.sport)}&tag=${encodeURIComponent(
+          finalSection
+        )}`;
 
-        const { error: insertError } = await supabaseAdmin.from("articles").insert({
-          title: aiData.title,
-          slug: `${finalSlug}-${Date.now().toString().slice(-4)}`,
-          content: aiData.content,
-          sport: feed.sport,
-          section: finalSection,
-          cover_image: coverImage,
-          source_url: item.link,
-          status: "draft",
-          featured: false,
-        });
+        const { error: insertError } = await supabaseAdmin
+          .from("articles")
+          .insert({
+            title: aiData.title,
+            slug: finalSlug,
+            content: aiData.content,
+            sport: feed.sport,
+            section: finalSection,
+            cover_image: coverImage,
+            source_url: item.link,
+            status: "published",
+          });
 
         if (insertError) {
-          errors.push(`Error DB: ${insertError.message}`);
-        } else {
-          createdCount++;
+          errors.push(`Error insertando en Supabase: ${insertError.message}`);
+          continue;
         }
 
-        if (createdCount >= 1) {
-          break;
-        }
+        createdCount++;
+        publishedTitles.push(aiData.title);
       }
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      errors.push(`Feed ${feed.name}: ${msg}`);
+    } catch (err) {
+      errors.push(
+        `Error en feed ${feed.name}: ${
+          err instanceof Error ? err.message : "desconocido"
+        }`
+      );
     }
   }
 
   return NextResponse.json({
-    success: true,
-    noticias_escaneadas: scannedCount,
-    borradores_creados: createdCount,
-    errores: errors,
+    ok: true,
+    created: createdCount,
+    scanned: scannedCount,
+    published: publishedTitles,
+    errors: errors.length > 0 ? errors : undefined,
   });
 }
