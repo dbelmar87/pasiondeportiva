@@ -92,24 +92,23 @@ export async function GET(request: NextRequest) {
 
     const needsDailySync = mode === "daily" || !todayCount || todayCount === 0;
 
-    if (!needsDailySync) {
-      const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
-      const nowIso = new Date().toISOString();
+    // Buscamos partidos iniciados en las últimas 4 horas que aún no tengan estado final
+    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+    const nowIso = new Date().toISOString();
 
-      const { count: activeMatches } = await supabase
-        .from("matches")
-        .select("*", { count: "exact", head: true })
-        .gte("match_date", threeHoursAgo)
-        .lte("match_date", nowIso)
-        .not("status_short", "in", '("FT","AET","PEN","PST","CANC")');
+    const { data: pendingMatches } = await supabase
+      .from("matches")
+      .select("id")
+      .gte("match_date", fourHoursAgo)
+      .lte("match_date", nowIso)
+      .not("status_short", "in", '("FT","AET","PEN","PST","CANC")');
 
-      if (!activeMatches || activeMatches === 0) {
-        return NextResponse.json({
-          ok: true,
-          apiCallsUsed: 0,
-          message: "Sin partidos en curso ahora. Cero peticiones consumidas.",
-        });
-      }
+    if (!needsDailySync && (!pendingMatches || pendingMatches.length === 0)) {
+      return NextResponse.json({
+        ok: true,
+        apiCallsUsed: 0,
+        message: "Sin partidos en curso o pendientes de cierre. Cero peticiones consumidas.",
+      });
     }
 
     const { data: fans } = await supabase
@@ -127,30 +126,31 @@ export async function GET(request: NextRequest) {
 
     const host = ["v3", "football", "api-sports", "io"].join(".");
     const baseUrl = `https://${host}/fixtures`;
-    const endpoint = needsDailySync
-      ? `${baseUrl}?date=${todayStr}&timezone=America/Santiago`
-      : `${baseUrl}?live=all&timezone=America/Santiago`;
-    
 
-  const apiRes = await fetch(endpoint, {
-    headers: {
-      "x-apisports-key": apiKey,
-    },
-    cache: "no-store",
-  });
+    let endpoint = `${baseUrl}?date=${todayStr}&timezone=America/Santiago`;
+    if (!needsDailySync && pendingMatches && pendingMatches.length > 0) {
+      const idsParam = pendingMatches.slice(0, 20).map((m) => m.id).join("-");
+      endpoint = `${baseUrl}?ids=${idsParam}&timezone=America/Santiago`;
+    }
 
-
-  if (!apiRes.ok) {
-    const errorBody = await apiRes.text();
-    return NextResponse.json(
-      {
-        error: `Error HTTP de API-Football: ${apiRes.status}`,
-        details: errorBody,
-        sentDate: todayStr,
+    const apiRes = await fetch(endpoint, {
+      headers: {
+        "x-apisports-key": apiKey,
       },
-      { status: 502 }
-    );
-  }
+      cache: "no-store",
+    });
+
+    if (!apiRes.ok) {
+      const errorBody = await apiRes.text();
+      return NextResponse.json(
+        {
+          error: `Error HTTP de API-Football: ${apiRes.status}`,
+          details: errorBody,
+          sentDate: todayStr,
+        },
+        { status: 502 }
+      );
+    }
 
     const apiData = await apiRes.json();
 
