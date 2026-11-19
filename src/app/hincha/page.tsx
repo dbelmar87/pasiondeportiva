@@ -180,7 +180,7 @@ export default function HinchaPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Navbar />
-
+      <TodayMatchesWidget favoriteTeams={profile?.favorite_teams || []} />
       <main className="mx-auto max-w-6xl px-4 py-8">
         {!userId ? (
           <FanAuthForm
@@ -268,7 +268,6 @@ export default function HinchaPage() {
                   onEdit={() => setActiveTab("editar")}
                   onUpdated={() => loadProfileAndNews(userId)}
                 />
-                <TodayMatchesWidget favoriteTeams={profile.favorite_teams || []} title="Partidos de Hoy (Tus Equipos)" compact />
               </div>
 
               {/* Columna Derecha: Vista dinámica según pestaña */}

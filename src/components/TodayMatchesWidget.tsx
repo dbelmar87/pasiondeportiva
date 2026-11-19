@@ -75,7 +75,7 @@ function getPriorityScore(match: MatchItem, normalizedFavs: string[]): number {
   return 50;
 }
 
-function TeamBadge({
+function MiniBadge({
   logo,
   shortName,
   alt,
@@ -88,7 +88,7 @@ function TeamBadge({
 
   if (!logo || imgError) {
     return (
-      <span className="inline-flex h-6 w-7 shrink-0 items-center justify-center rounded bg-slate-100 text-[10px] font-extrabold text-slate-700">
+      <span className="inline-flex h-4 w-5 shrink-0 items-center justify-center rounded bg-slate-200 text-[9px] font-extrabold text-slate-700">
         {shortName}
       </span>
     );
@@ -100,21 +100,19 @@ function TeamBadge({
       alt={alt}
       loading="lazy"
       onError={() => setImgError(true)}
-      className="h-6 w-6 shrink-0 object-contain"
+      className="h-4 w-4 shrink-0 object-contain"
     />
   );
 }
 
 export default function TodayMatchesWidget({
   favoriteTeams = [],
-  title = "Partidos de Hoy",
 }: TodayMatchesWidgetProps) {
   const supabase = useMemo(() => createClient(), []);
-  const sliderRef = useRef<HTMLDivElement>(null);
+  const stripRef = useRef<HTMLDivElement>(null);
 
   const [matches, setMatches] = useState<MatchItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
   const [selectedLeague, setSelectedLeague] = useState<string>("ALL");
 
   useEffect(() => {
@@ -131,7 +129,7 @@ export default function TodayMatchesWidget({
       const start = `${todaySantiago}T00:00:00-03:00`;
       const end = `${todaySantiago}T23:59:59-03:00`;
 
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("matches")
         .select("*")
         .gte("match_date", start)
@@ -139,18 +137,12 @@ export default function TodayMatchesWidget({
         .order("match_date", { ascending: true });
 
       if (isMounted) {
-        if (error) {
-          setFetchError(error.message);
-        } else {
-          setFetchError(null);
-          setMatches((data as MatchItem[]) || []);
-        }
+        setMatches((data as MatchItem[]) || []);
         setLoading(false);
       }
     }
 
     fetchTodayMatches();
-
     const interval = setInterval(fetchTodayMatches, 45_000);
     return () => {
       isMounted = false;
@@ -180,8 +172,8 @@ export default function TodayMatchesWidget({
     });
   }, [matches, normalizedFavs]);
 
-  // Pestañas solo para ligas con 2 o más partidos hoy (los independientes quedan sin categorizar en "Todos")
-  const leagueTabs = useMemo(() => {
+  // Selector compacto: solo agrupa ligas con 2+ partidos; los independientes quedan en "Todos"
+  const leagueOptions = useMemo(() => {
     const counts = new Map<string, { name: string; count: number }>();
 
     for (const m of sortedMatches) {
@@ -216,206 +208,165 @@ export default function TodayMatchesWidget({
     return sortedMatches.filter((m) => String(m.league_id) === selectedLeague);
   }, [sortedMatches, selectedLeague]);
 
-  function scrollSlider(direction: "left" | "right") {
-    if (!sliderRef.current) return;
-    const distance = direction === "left" ? -320 : 320;
-    sliderRef.current.scrollBy({ left: distance, behavior: "smooth" });
+  function scrollStrip(direction: "left" | "right") {
+    if (!stripRef.current) return;
+    stripRef.current.scrollBy({
+      left: direction === "left" ? -420 : 420,
+      behavior: "smooth",
+    });
+  }
+
+  if (!loading && matches.length === 0) {
+    return null;
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      {/* Cabecera + Flechas */}
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-600" />
-          <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
-            {title}
-          </h2>
-          {!loading && (
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
-              {matches.length}
+    <div className="w-full border-b border-slate-200 bg-white">
+      <div className="mx-auto flex max-w-7xl items-stretch">
+        {/* Columna Izquierda Fija: Selector compacto de torneo (estilo Scoreboard ESPN) */}
+        <div className="flex shrink-0 flex-col justify-center border-r border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="mb-1 flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-600" />
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+              Marcadores
             </span>
-          )}
-        </div>
+          </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium text-slate-400">
-            Hora Chile
-          </span>
-          {displayedMatches.length > 1 && (
-            <div className="hidden items-center gap-1 sm:flex">
-              <button
-                type="button"
-                onClick={() => scrollSlider("left")}
-                aria-label="Anterior"
-                className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 transition hover:bg-slate-900 hover:text-white"
-              >
-                ‹
-              </button>
-              <button
-                type="button"
-                onClick={() => scrollSlider("right")}
-                aria-label="Siguiente"
-                className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 transition hover:bg-slate-900 hover:text-white"
-              >
-                ›
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Pestañas dinámicas por liga (solo si tienen 2+ partidos) */}
-      {!loading && !fetchError && sortedMatches.length > 0 && (
-        <div className="mb-3 flex items-center gap-1.5 overflow-x-auto pb-1">
-                    <button
-            type="button"
-            onClick={() => setSelectedLeague("ALL")}
-            className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-bold transition ${
-              selectedLeague === "ALL"
-                ? "bg-slate-900 text-white"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
+          <select
+            aria-label="Filtrar por torneo"
+            value={selectedLeague}
+            onChange={(e) => setSelectedLeague(e.target.value)}
+            className="max-w-[140px] cursor-pointer rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-extrabold text-slate-900 focus:border-slate-900 focus:outline-none sm:max-w-[175px]"
           >
-            Todos ({sortedMatches.length})
-          </button>
+            <option value="ALL">Todos ({sortedMatches.length})</option>
+            {liveCount > 0 && (
+              <option value="LIVE">🔴 En Vivo ({liveCount})</option>
+            )}
+            {leagueOptions.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.name} ({opt.count})
+              </option>
+            ))}
+          </select>
+        </div>
 
-          {liveCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setSelectedLeague("LIVE")}
-              className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-bold transition ${
-                selectedLeague === "LIVE"
-                  ? "bg-red-600 text-white"
-                  : "bg-red-50 text-red-700 hover:bg-red-100"
-              }`}
-            >
-              🔴 En Vivo ({liveCount})
-            </button>
-          )}
-
-          {leagueTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setSelectedLeague(tab.id)}
-              className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-bold transition ${
-                selectedLeague === tab.id
-                  ? "bg-slate-900 text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              {tab.name} ({tab.count})
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Contenido del Slider */}
-      {loading ? (
-        <div className="flex gap-3 overflow-hidden">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-24 w-64 shrink-0 animate-pulse rounded-xl bg-slate-100"
-            />
-          ))}
-        </div>
-      ) : fetchError ? (
-        <div className="p-4 text-center text-xs font-semibold text-red-600">
-          Error cargando partidos: {fetchError}
-        </div>
-      ) : displayedMatches.length === 0 ? (
-        <div className="p-4 text-center text-sm text-slate-500">
-          No hay encuentros destacados programados para hoy.
-        </div>
-      ) : (
-        <div
-          ref={sliderRef}
-          className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 scroll-smooth"
+        {/* Botón Izquierdo */}
+        <button
+          type="button"
+          onClick={() => scrollStrip("left")}
+          aria-label="Desplazar izquierda"
+          className="hidden shrink-0 items-center justify-center border-r border-slate-200 bg-white px-2 text-sm font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 md:flex"
         >
-          {displayedMatches.map((match) => {
-            const isLive = LIVE_STATUSES.has(match.status_short);
-            const isFinished = FINISHED_STATUSES.has(match.status_short);
-            const hasScore = isLive || isFinished;
-            const isFollowed = normalizedFavs.some(
-              (fav) =>
-                match.home_team.toLowerCase().includes(fav) ||
-                match.away_team.toLowerCase().includes(fav)
-            );
+          ‹
+        </button>
 
-            return (
-              <div
-                key={match.id}
-                className={`w-64 shrink-0 snap-start rounded-xl border p-3 transition ${
-                  isFollowed
-                    ? "border-amber-300 bg-amber-50/40"
-                    : "border-slate-200 bg-slate-50/50 hover:bg-white"
-                }`}
-              >
-                <div className="mb-2 flex items-center justify-between gap-2 text-[10px]">
-                  <span className="truncate font-bold uppercase text-slate-500">
-                    {match.league_name}
-                  </span>
-                  {isLive ? (
-                    <span className="shrink-0 rounded bg-red-600 px-1.5 py-0.5 font-extrabold text-white">
-                      {match.status_short === "HT"
-                        ? "ENTRET."
-                        : `EN VIVO ${match.elapsed ? `${match.elapsed}'` : ""}`}
-                    </span>
-                  ) : isFinished ? (
-                    <span className="shrink-0 rounded bg-slate-200 px-1.5 py-0.5 font-bold text-slate-700">
-                      FINAL
-                    </span>
-                  ) : (
-                    <span className="shrink-0 font-extrabold text-slate-800">
-                      {formatSantiagoTime(match.match_date)}
-                    </span>
-                  )}
+        {/* Cinta Horizontal de Partidos (sin bordes redondeados flotantes, separados por líneas finas) */}
+        <div
+          ref={stripRef}
+          className="flex flex-1 divide-x divide-slate-200 overflow-x-auto scroll-smooth"
+        >
+          {loading
+            ? [1, 2, 3, 4, 5, 6].map((n) => (
+                <div
+                  key={n}
+                  className="flex h-[74px] w-44 shrink-0 flex-col justify-center gap-2 px-3"
+                >
+                  <div className="h-2.5 w-20 animate-pulse rounded bg-slate-100" />
+                  <div className="h-3 w-32 animate-pulse rounded bg-slate-100" />
+                  <div className="h-3 w-28 animate-pulse rounded bg-slate-100" />
                 </div>
+              ))
+            : displayedMatches.map((match) => {
+                const isLive = LIVE_STATUSES.has(match.status_short);
+                const isFinished = FINISHED_STATUSES.has(match.status_short);
+                const hasScore = isLive || isFinished;
+                const isFollowed = normalizedFavs.some(
+                  (fav) =>
+                    match.home_team.toLowerCase().includes(fav) ||
+                    match.away_team.toLowerCase().includes(fav)
+                );
 
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <TeamBadge
-                        logo={match.home_logo}
-                        shortName={match.home_short}
-                        alt={match.home_team}
-                      />
-                      <span className="truncate font-bold text-slate-900">
-                        {match.home_team}
+                return (
+                  <div
+                    key={match.id}
+                    className={`flex w-44 shrink-0 flex-col justify-between px-3 py-2 transition hover:bg-slate-50 ${
+                      isFollowed ? "bg-amber-50/60" : "bg-white"
+                    }`}
+                  >
+                    {/* Línea superior: Liga abreviada + Hora/Estado */}
+                    <div className="mb-1 flex items-center justify-between gap-1 text-[10px]">
+                      <span className="truncate font-semibold text-slate-400">
+                        {match.league_name}
+                      </span>
+                      {isLive ? (
+                        <span className="shrink-0 font-extrabold text-red-600">
+                          {match.status_short === "HT"
+                            ? "ENT"
+                            : `${match.elapsed ?? ""}'`}
+                        </span>
+                      ) : isFinished ? (
+                        <span className="shrink-0 font-bold text-slate-500">
+                          FINAL
+                        </span>
+                      ) : (
+                        <span className="shrink-0 font-bold text-slate-700">
+                          {formatSantiagoTime(match.match_date)}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Fila Equipo Local */}
+                    <div className="flex items-center justify-between gap-1.5 text-xs">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <MiniBadge
+                          logo={match.home_logo}
+                          shortName={match.home_short}
+                          alt={match.home_team}
+                        />
+                        <span className="truncate font-bold text-slate-900">
+                          {match.home_team}
+                        </span>
+                      </div>
+                      <span className="font-extrabold text-slate-900">
+                        {hasScore && match.home_score !== null
+                          ? match.home_score
+                          : "-"}
                       </span>
                     </div>
-                    <span className="font-extrabold text-slate-900">
-                      {hasScore && match.home_score !== null
-                        ? match.home_score
-                        : "-"}
-                    </span>
-                  </div>
 
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <TeamBadge
-                        logo={match.away_logo}
-                        shortName={match.away_short}
-                        alt={match.away_team}
-                      />
-                      <span className="truncate font-bold text-slate-900">
-                        {match.away_team}
+                    {/* Fila Equipo Visita */}
+                    <div className="mt-0.5 flex items-center justify-between gap-1.5 text-xs">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <MiniBadge
+                          logo={match.away_logo}
+                          shortName={match.away_short}
+                          alt={match.away_team}
+                        />
+                        <span className="truncate font-bold text-slate-900">
+                          {match.away_team}
+                        </span>
+                      </div>
+                      <span className="font-extrabold text-slate-900">
+                        {hasScore && match.away_score !== null
+                          ? match.away_score
+                          : "-"}
                       </span>
                     </div>
-                    <span className="font-extrabold text-slate-900">
-                      {hasScore && match.away_score !== null
-                        ? match.away_score
-                        : "-"}
-                    </span>
                   </div>
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
         </div>
-      )}
-    </section>
+
+        {/* Botón Derecho */}
+        <button
+          type="button"
+          onClick={() => scrollStrip("right")}
+          aria-label="Desplazar derecha"
+          className="hidden shrink-0 items-center justify-center border-l border-slate-200 bg-white px-2 text-sm font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 md:flex"
+        >
+          ›
+        </button>
+      </div>
+    </div>
   );
 }
