@@ -1,29 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+// 1. Ligas prioritarias (Chile, Copas Continentales y las 4 grandes de Europa)
 const IMPORTANT_LEAGUE_IDS = new Set([
-    265, // Primera División de Chile
-    266, // Primera B Chile
-    267, // Copa Chile
-    13,  // CONMEBOL Libertadores
-    11,  // CONMEBOL Sudamericana
-    34,  // Eliminatorias Sudamericanas
-    31,  // Eliminatorias CONMEBOL (alt)
-    10,  // Amistosos Internacionales (La Roja)
-    9,   // Copa América
-    1,   // Mundial
-    5,   // UEFA Nations League
-    2,   // UEFA Champions League
-    3,   // UEFA Europa League
-    39,  // Premier League (Inglaterra)
-    140, // La Liga (España)
-    135, // Serie A (Italia)
-    78,  // Bundesliga (Alemania)
-    61,  // Ligue 1 (Francia)
-    71,  // Brasileirão Serie A
-    128, // Liga Profesional Argentina
-  ]);
-  
+  265, // Primera División de Chile
+  267, // Copa Chile
+  13,  // CONMEBOL Libertadores
+  11,  // CONMEBOL Sudamericana
+  34,  // Eliminatorias Sudamericanas
+  10,  // Amistosos Internacionales (La Roja)
+  9,   // Copa América
+  1,   // Mundial
+  2,   // UEFA Champions League
+  3,   // UEFA Europa League
+  39,  // Premier League (Inglaterra)
+  140, // La Liga (España)
+  135, // Serie A (Italia)
+  78,  // Bundesliga (Alemania)
+]);
+
+// 2. Clubes destacados fijos del portal (aunque jueguen ligas fuera de Europa/Chile)
+const FEATURED_CLUBS = ["al-nassr", "al nassr", "inter miami"];
 
 
 function getTodaySantiago(): string {
@@ -169,12 +166,16 @@ export async function GET(request: NextRequest) {
       const awayName = (item.teams?.away?.name || "").toLowerCase();
 
       const isImportantLeague = IMPORTANT_LEAGUE_IDS.has(leagueId);
+      const isFeaturedClub = FEATURED_CLUBS.some(
+        (club) => homeName.includes(club) || awayName.includes(club)
+      );
       const isFollowedClub = Array.from(followedTeams).some(
         (fav) => homeName.includes(fav) || awayName.includes(fav)
       );
 
-      return isImportantLeague || isFollowedClub;
+      return isImportantLeague || isFeaturedClub || isFollowedClub;
     });
+
 
     if (relevantFixtures.length > 0) {
       const rows = relevantFixtures.map((item: any) => ({
