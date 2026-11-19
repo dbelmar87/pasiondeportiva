@@ -59,6 +59,7 @@ export default async function HomePage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Navbar />
+      <TodayMatchesWidget />
       <main className="mx-auto max-w-7xl px-4 py-8">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
           <div className="space-y-8 lg:col-span-8">
@@ -141,7 +142,6 @@ export default async function HomePage() {
           </div>
 
           <aside className="space-y-6 lg:col-span-4">
-            <TodayMatchesWidget compact />
             <WeeklyPoll />
 
             <div className="rounded-2xl border border-slate-200 bg-slate-900 p-6 text-white">
