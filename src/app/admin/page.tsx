@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
-  publishArticle,
   rejectArticle,
   createManualArticle,
   deleteReportedComment,
@@ -50,12 +49,13 @@ async function AdminContent({ searchParams }: AdminPageProps) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // 1. Obtener borradores de la IA
-  const { data: drafts } = await supabaseAdmin
+  // 1. Últimas noticias publicadas (control rápido de lo que sube la IA o manual)
+  const { data: recentPublished } = await supabaseAdmin
     .from("articles")
-    .select("*")
-    .eq("status", "draft")
-    .order("created_at", { ascending: false });
+    .select("id, title, sport, section, created_at, source_url")
+    .eq("status", "published")
+    .order("created_at", { ascending: false })
+    .limit(10);
 
   // 2. Obtener denuncias de comentarios pendientes
   const { data: reports } = await supabaseAdmin
@@ -75,12 +75,12 @@ async function AdminContent({ searchParams }: AdminPageProps) {
               Panel de Control — Pasión Deportiva
             </h1>
             <p className="text-sm text-slate-600">
-              Bandeja de visación rápida, publicación y moderación
+              Publicación rápida, control de portada y moderación de tribuna
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
-              {drafts?.length || 0} borradores
+            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
+              {recentPublished?.length || 0} publicadas recientes
             </span>
             <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">
               {reports?.length || 0} denuncias
@@ -88,90 +88,7 @@ async function AdminContent({ searchParams }: AdminPageProps) {
           </div>
         </div>
 
-        {/* Sección 1: Borradores generados por IA esperando aprobación */}
-        <section className="mb-10">
-          <h2 className="mb-4 text-lg font-bold text-slate-800">
-            Borradores por Aprobar (IA)
-          </h2>
-
-          {!drafts || drafts.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-              No hay borradores pendientes. Cuando el Agente de IA detecte
-              noticias nuevas, aparecerán aquí.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {drafts.map((article) => (
-                <div
-                  key={article.id}
-                  className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
-                >
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="rounded bg-slate-900 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                      {article.sport}
-                    </span>
-                    <span className="text-xs font-medium uppercase text-slate-500">
-                      {article.section}
-                    </span>
-                    {article.source_url && (
-                      <a
-                        href={article.source_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ml-auto text-xs text-blue-600 hover:underline"
-                      >
-                        Verificar fuente original ↗
-                      </a>
-                    )}
-                  </div>
-
-                  <form
-                    action={async (formData) => {
-                      "use server";
-                      const newTitle = formData.get("title") as string;
-                      await publishArticle(article.id, newTitle);
-                    }}
-                    className="space-y-3"
-                  >
-                    <input
-                      type="text"
-                      name="title"
-                      defaultValue={article.title}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 font-bold text-slate-900"
-                    />
-                    <p className="text-sm text-slate-600">{article.content}</p>
-
-                    <div className="flex gap-3 pt-2">
-                      <button
-                        type="submit"
-                        className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700"
-                      >
-                        ✓ Aprobar y Publicar
-                      </button>
-                    </div>
-                  </form>
-
-                  <form
-                    action={async () => {
-                      "use server";
-                      await rejectArticle(article.id);
-                    }}
-                    className="mt-2"
-                  >
-                    <button
-                      type="submit"
-                      className="text-xs font-medium text-red-600 hover:underline"
-                    >
-                      Descartar borrador
-                    </button>
-                  </form>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Sección 2: Publicación Rápida Manual */}
+        {/* Sección 1: Publicación Rápida Manual */}
         <section className="mb-10 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-bold text-slate-800">
             Publicar Noticia Rápida (Manual)
@@ -239,7 +156,74 @@ async function AdminContent({ searchParams }: AdminPageProps) {
             </button>
           </form>
         </section>
-        {/* Sección 3: Moderación de Comentarios Denunciados */}
+
+        {/* Sección 2: Últimas Noticias Publicadas (Control rápido) */}
+        <section className="mb-10">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-slate-800">
+              Últimas Noticias Publicadas ({recentPublished?.length || 0})
+            </h2>
+            <span className="text-xs text-slate-500">
+              Publicación automática y manual
+            </span>
+          </div>
+
+          {!recentPublished || recentPublished.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
+              Aún no hay noticias publicadas.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              {recentPublished.map((article) => (
+                <div
+                  key={article.id}
+                  className="flex flex-wrap items-center justify-between gap-3 p-4 hover:bg-slate-50"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-800">
+                        Publicada
+                      </span>
+                      <span className="text-[11px] font-bold uppercase text-slate-500">
+                        {article.sport === "tennis" ? "Tenis" : "Fútbol"} •{" "}
+                        {article.section}
+                      </span>
+                      {article.source_url && (
+                        <a
+                          href={article.source_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-blue-600 hover:underline"
+                        >
+                          Fuente ↗
+                        </a>
+                      )}
+                    </div>
+                    <p className="truncate text-sm font-bold text-slate-900">
+                      {article.title}
+                    </p>
+                  </div>
+
+                  <form
+                    action={async () => {
+                      "use server";
+                      await rejectArticle(article.id);
+                    }}
+                  >
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 transition hover:bg-red-100"
+                    >
+                      Eliminar
+                    </button>
+                  </form>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Sección 3: Denuncias de Comentarios Pendientes */}
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-800">
