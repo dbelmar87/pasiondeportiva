@@ -89,16 +89,18 @@ export async function GET(request: NextRequest) {
 
     const needsDailySync = mode === "daily" || !todayCount || todayCount === 0;
 
-    // Buscamos partidos iniciados en las últimas 4 horas que aún no tengan estado final
-    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
-    const nowIso = new Date().toISOString();
+        // Solo buscamos partidos que empezaron hace al menos 100 min (recta final)
+    // y hace máximo 165 min (2h 45m, cubre alargue y penales)
+    const minFinishedTime = new Date(Date.now() - 100 * 60 * 1000).toISOString();
+    const maxWindowTime = new Date(Date.now() - 165 * 60 * 1000).toISOString();
 
     const { data: pendingMatches } = await supabase
       .from("matches")
       .select("id")
-      .gte("match_date", sixHoursAgo)
-      .lte("match_date", nowIso)
-      .not("status_short", "in", '("FT","AET","PEN","PST","CANC")');
+      .gte("match_date", maxWindowTime)
+      .lte("match_date", minFinishedTime)
+      .not("status_short", "in", '("FT","AET","PEN","PST","CANC","SUSP","INT","ABD")');
+
 
     if (!needsDailySync && (!pendingMatches || pendingMatches.length === 0)) {
       return NextResponse.json({

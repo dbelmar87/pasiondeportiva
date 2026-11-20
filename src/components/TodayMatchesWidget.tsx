@@ -213,6 +213,7 @@ export default function TodayMatchesWidget({
   }, [supabase]);
 
   const unifiedList = useMemo(() => {
+    const now = Date.now();
     const favTeams = favoriteTeams
       .map((t) => t.toLowerCase().trim())
       .filter((t) => t.length >= 3);
@@ -224,6 +225,13 @@ export default function TodayMatchesWidget({
 
     if (filter === "all" || filter === "football") {
       for (const m of footballMatches) {
+        const startTime = new Date(m.match_date).getTime();
+        const isFinished = FOOTBALL_FINISHED.has(m.status_short);
+        const isLive =
+          !isFinished &&
+          (FOOTBALL_LIVE.has(m.status_short) ||
+            (now >= startTime && now - startTime < 3 * 60 * 60 * 1000));
+
         const isFav = favTeams.some(
           (f) =>
             m.home_team.toLowerCase().includes(f) ||
@@ -231,10 +239,10 @@ export default function TodayMatchesWidget({
         );
         items.push({
           sport: "football",
-          sortTime: new Date(m.match_date).getTime(),
+          sortTime: startTime,
           isPriority: isFav || m.is_important,
-          isLive: FOOTBALL_LIVE.has(m.status_short),
-          isFinished: FOOTBALL_FINISHED.has(m.status_short),
+          isLive,
+          isFinished,
           data: m,
         });
       }
@@ -242,6 +250,13 @@ export default function TodayMatchesWidget({
 
     if (filter === "all" || filter === "tennis") {
       for (const t of tennisMatches) {
+        const startTime = new Date(t.match_date).getTime();
+        const isFinished = TENNIS_FINISHED.has(t.status_short);
+        const isLive =
+          !isFinished &&
+          (TENNIS_LIVE.has(t.status_short) ||
+            (now >= startTime && now - startTime < 5 * 60 * 60 * 1000));
+
         const isFav =
           t.has_chilean ||
           favPlayers.some(
@@ -251,10 +266,10 @@ export default function TodayMatchesWidget({
           );
         items.push({
           sport: "tennis",
-          sortTime: new Date(t.match_date).getTime(),
+          sortTime: startTime,
           isPriority: isFav,
-          isLive: TENNIS_LIVE.has(t.status_short),
-          isFinished: TENNIS_FINISHED.has(t.status_short),
+          isLive,
+          isFinished,
           data: t,
         });
       }
