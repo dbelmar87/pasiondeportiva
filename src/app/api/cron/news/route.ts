@@ -32,6 +32,18 @@ interface RssItem {
   sourceName: string;
 }
 
+const BLOCKED_KEYWORDS = [
+  "teleserie", "telenovela", "farandula", "reality", "gran hermano",
+  "palabras al cierre", "matinal", "espectaculos", "romance", "polola",
+  "quiebre amoroso", "infidelidad", "festival de vina", "mega", "chilevision",
+  "canal 13", "tvn", "rating", "capitulo", "actor", "actriz", "cantante"
+];
+
+function isSportsNews(item: RssItem): boolean {
+  const fullText = normalizeText(`${item.title} ${item.description}`);
+  return !BLOCKED_KEYWORDS.some((word) => fullText.includes(word));
+}
+
 function parseGoogleNewsRss(xml: string): RssItem[] {
   const items: RssItem[] = [];
   const itemMatches = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
@@ -64,7 +76,9 @@ function parseGoogleNewsRss(xml: string): RssItem[] {
 function buildGoogleNewsUrl(query: string) {
   const url = new URL("https://news.google.com");
   url.pathname = "/rss/search";
-  url.searchParams.set("q", query + " when:1d");
+  // Excluimos términos de TV/espectáculos directamente en Google News
+  const cleanQuery = `${query} -farandula -teleserie -reality -espectaculos when:1d`;
+  url.searchParams.set("q", cleanQuery);
   url.searchParams.set("hl", "es-419");
   url.searchParams.set("gl", "CL");
   url.searchParams.set("ceid", "CL:es-419");
@@ -75,15 +89,15 @@ const RSS_FEEDS = [
   {
     name: "Legión Chilena Fútbol",
     url: buildGoogleNewsUrl(
-      '("Alexis Sánchez" OR "Ben Brereton" OR "Darío Osorio" OR "Guillermo Maripán" OR "Gabriel Suazo" OR "Erick Pulgar" OR "Paulo Díaz" OR "Marcelino Núñez" OR "Felipe Loyola" OR "La Roja")'
+      '("Alexis Sánchez" OR "Ben Brereton" OR "Darío Osorio" OR "Guillermo Maripán" OR "Gabriel Suazo" OR "Erick Pulgar" OR "Paulo Díaz" OR "Marcelino Núñez" OR "Felipe Loyola" OR "Selección Chilena" OR "La Roja" fútbol)'
     ),
     sport: "football",
     defaultSection: "chilenos",
   },
   {
-    name: "Tenis Chileno y ATP",
+    name: "Tenis Chileno y Circuito",
     url: buildGoogleNewsUrl(
-      '("Alejandro Tabilo" OR "Nicolás Jarry" OR "Cristian Garin" OR "Tomás Barrios" OR "ATP")'
+      '("Alejandro Tabilo" OR "Nicolás Jarry" OR "Cristian Garin" OR "Tomás Barrios" OR "tenis" OR "Grand Slam" OR "Masters 1000")'
     ),
     sport: "tennis",
     defaultSection: "chilenos",
@@ -91,7 +105,7 @@ const RSS_FEEDS = [
   {
     name: "Superestrellas y Torneos",
     url: buildGoogleNewsUrl(
-      '("Real Madrid" OR "FC Barcelona" OR "Lamine Yamal" OR "Kylian Mbappé" OR "Vinicius" OR "Champions League")'
+      '("Real Madrid" OR "FC Barcelona" OR "Lamine Yamal" OR "Kylian Mbappé" OR "Vinicius" OR "Champions League" OR "Premier League")'
     ),
     sport: "football",
     defaultSection: "superestrellas",
@@ -184,6 +198,9 @@ export async function GET(request: Request) {
 
       for (const item of recentItems.slice(0, 10)) {
         if (createdCount >= 1) break;
+
+        if (!isSportsNews(item)) continue;
+        
         scannedCount++;
 
         const { data: existingByUrl } = await supabaseAdmin
@@ -210,27 +227,30 @@ export async function GET(request: Request) {
         }
 
         const prompt = `
-          Eres un editor deportivo chileno moderno para el portal "Pasión Deportiva".
-          Redacta una nota periodística breve, objetiva y 100% original en español de Chile basándote ÚNICAMENTE en los hechos del siguiente despacho informativo.
+        Eres un editor deportivo chileno moderno para el portal "Pasión Deportiva" (exclusivo de FÚTBOL y TENIS).
+        Analiza el siguiente despacho informativo. Si la noticia trata sobre farándula, televisión, teleseries, vida privada/amorosa o cualquier tema ajeno al deporte competitivo (fútbol o tenis), responde ÚNICAMENTE: {"reject": true}
 
-          Reglas editoriales estrictas:
-          1. NO copies frases literales del titular o resumen original; reescribe todo con voz propia.
-          2. NO inventes marcadores, lesiones, fechas ni declaraciones que no aparezcan en el texto base.
-          3. Si el medio de origen (${item.sourceName || "prensa deportiva"}) aporta un dato o reporte específico, cítalo de forma natural (ej. "según informó ${item.sourceName}").
+        Si SÍ es una noticia deportiva real de fútbol o tenis, redacta una nota periodística breve, objetiva y 100% original en español de Chile basándote ÚNICAMENTE en los hechos del despacho.
 
-          Titular de referencia: ${item.title}
-          Contexto disponible: ${item.description}
-          Medio de origen: ${item.sourceName || "No especificado"}
-          Fecha de publicación: ${item.pubDate}
+        Reglas editoriales estrictas:
+        1. NO copies frases literales del titular o resumen original; reescribe todo con voz propia.
+        2. NO inventes marcadores, lesiones, fechas ni declaraciones que no aparezcan en el texto base.
+        3. Si el medio de origen (${item.sourceName || "prensa deportiva"}) aporta un dato o reporte específico, cítalo de forma natural (ej. "según informó ${item.sourceName}").
 
-          Responde ÚNICAMENTE con un objeto JSON válido con esta estructura exacta:
-          {
-            "title": "Titular atractivo, claro y sin humo en español de Chile (máximo 85 caracteres)",
-            "section": "${feed.defaultSection}",
-            "content": "Cuerpo de la noticia en 3 párrafos cortos, claros y directos en español de Chile."
-          }
-          Nota: En "section" usa solo uno de estos tres valores exactos: "chilenos", "superestrellas" o "torneos".
-        `;
+        Titular de referencia: ${item.title}
+        Contexto disponible: ${item.description}
+        Medio de origen: ${item.sourceName || "No especificado"}
+        Fecha de publicación: ${item.pubDate}
+
+        Responde ÚNICAMENTE con un objeto JSON válido con esta estructura exacta:
+        {
+          "reject": false,
+          "title": "Titular atractivo, claro y sin humo en español de Chile (máximo 85 caracteres)",
+          "section": "${feed.defaultSection}",
+          "content": "Cuerpo de la noticia en 3 párrafos cortos, claros y directos en español de Chile."
+        }
+        Nota: En "section" usa solo uno de estos tres valores exactos: "chilenos", "superestrellas" o "torneos".
+      `;
 
         const responseText = await generateSafeContent(
           prompt,
@@ -238,6 +258,10 @@ export async function GET(request: Request) {
         );
         const rawText = responseText.replace(/```json|```/g, "").trim();
         const aiData = JSON.parse(rawText);
+
+        if (aiData.reject === true || !aiData.title || !aiData.content) {
+          continue;
+        }
 
         let finalSlug = normalizeText(aiData.title)
           .replace(/[^a-z0-9]+/g, "-")
