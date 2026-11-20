@@ -87,3 +87,37 @@ export async function dismissCommentReport(reportId: string) {
   revalidatePath("/admin");
 }
 
+export async function upsertAtpRankingAction(formData: FormData) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const player_name = String(formData.get("player_name") || "").trim();
+  const rank = Number(formData.get("rank"));
+  const points = Number(formData.get("points") || 0);
+  const country = String(formData.get("country") || "CHI").toUpperCase();
+  const is_chilean = formData.get("is_chilean") === "on";
+  const avatar_url = String(formData.get("avatar_url") || "").trim();
+
+  if (!player_name || !rank) return { error: "Nombre y ranking requeridos" };
+
+  const { error } = await supabase.from("atp_rankings").upsert(
+    {
+      player_name,
+      rank,
+      points,
+      country,
+      is_chilean,
+      avatar_url,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "player_name" }
+  );
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/");
+  return { ok: true };
+}
+

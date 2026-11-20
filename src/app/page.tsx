@@ -4,6 +4,7 @@ import { cacheLife } from "next/cache";
 import WeeklyPoll from "@/components/WeeklyPoll";
 import Navbar from "@/components/Navbar/Navbar";
 import TodayMatchesWidget from "@/components/TodayMatchesWidget";
+import AtpRankingWidget from "@/components/AtpRankingWidget";
 
 interface Article {
   id: string;
@@ -60,7 +61,7 @@ export default async function HomePage() {
     <div className="min-h-screen bg-slate-50">
       <Navbar />
       <TodayMatchesWidget />
-      <main className="mx-auto max-w-7xl px-4 py-8">
+      <main className="mx-auto max-w-7xl space-y-6 px-4 py-8">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
           <div className="space-y-8 lg:col-span-8">
             {featuredArticle ? (
@@ -95,7 +96,7 @@ export default async function HomePage() {
             ) : (
               <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center">
                 <p className="text-slate-500">
-                  Aún no hay noticias publicadas. Entra a <strong>/admin</strong> y aprueba tu primer borrador.
+                  Aún no hay noticias publicadas. Entra a <strong>/admin</strong> y publica tu primera noticia.
                 </p>
               </div>
             )}
@@ -143,6 +144,7 @@ export default async function HomePage() {
 
           <aside className="space-y-6 lg:col-span-4">
             <WeeklyPoll />
+            <AtpRankingWidget />
 
             <div className="rounded-2xl border border-slate-200 bg-slate-900 p-6 text-white">
               <span className="mb-2 inline-block rounded bg-emerald-500/20 px-2.5 py-1 text-xs font-bold text-emerald-400">
