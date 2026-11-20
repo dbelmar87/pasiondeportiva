@@ -60,8 +60,9 @@ export default async function HomePage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Navbar />
-      <TodayMatchesWidget />
+      
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-8">
+      <TodayMatchesWidget />
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
           <div className="space-y-8 lg:col-span-8">
             {featuredArticle ? (

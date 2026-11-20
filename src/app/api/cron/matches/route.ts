@@ -90,13 +90,13 @@ export async function GET(request: NextRequest) {
     const needsDailySync = mode === "daily" || !todayCount || todayCount === 0;
 
     // Buscamos partidos iniciados en las últimas 4 horas que aún no tengan estado final
-    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
     const nowIso = new Date().toISOString();
 
     const { data: pendingMatches } = await supabase
       .from("matches")
       .select("id")
-      .gte("match_date", fourHoursAgo)
+      .gte("match_date", sixHoursAgo)
       .lte("match_date", nowIso)
       .not("status_short", "in", '("FT","AET","PEN","PST","CANC")');
 
