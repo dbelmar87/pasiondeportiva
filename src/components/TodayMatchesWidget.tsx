@@ -72,6 +72,20 @@ const FOOTBALL_FINISHED = new Set(["FT", "AET", "PEN"]);
 const TENNIS_LIVE = new Set(["LIVE", "IN_PROGRESS", "1S", "2S", "3S", "4S", "5S"]);
 const TENNIS_FINISHED = new Set(["FT", "FINISHED", "RET", "WO"]);
 
+const TOP_10_ATP = [
+  "zverev",
+  "sinner",
+  "alcaraz",
+  "shelton",
+  "medvedev",
+  "cobolli",
+  "fils",
+  "tiafoe",
+  "fritz",
+  "jodar",
+  "jódar",
+];
+
 // Conversión de código de 3 letras (ATP/FIFA) a ISO 2 letras para banderas SVG
 const ALPHA3_TO_ALPHA2: Record<string, string> = {
   CHI: "cl", CHL: "cl",
@@ -257,31 +271,51 @@ export default function TodayMatchesWidget({
     }
 
     if (filter === "all" || filter === "tennis") {
+      const CHILEAN_PLAYERS = ["tabilo", "jarry", "garin", "barrios", "soto"];
+
       for (const t of tennisMatches) {
+        const p1 = t.player1_name.toLowerCase();
+        const p2 = t.player2_name.toLowerCase();
+        const c1 = (t.player1_country || "").trim().toUpperCase();
+        const c2 = (t.player2_country || "").trim().toUpperCase();
+
+        // Ignoramos t.has_chilean porque puede traer falsos positivos como "Lucas Nunez (USA)"
+        const isChilean =
+          ["CHI", "CHL", "CL"].includes(c1) ||
+          ["CHI", "CHL", "CL"].includes(c2) ||
+          CHILEAN_PLAYERS.some((ch) => p1.includes(ch) || p2.includes(ch));
+
+        const isTopTen = TOP_10_ATP.some(
+          (topName) => p1.includes(topName) || p2.includes(topName)
+        );
+
+        const isUserFav = favPlayers.some(
+          (f) => p1.includes(f) || p2.includes(f)
+        );
+
+        if (!isChilean && !isTopTen && !isUserFav) {
+          continue;
+        }
+
         const startTime = new Date(t.match_date).getTime();
         const isFinished = TENNIS_FINISHED.has(t.status_short);
         const isLive =
           !isFinished &&
           (TENNIS_LIVE.has(t.status_short) ||
-          (now > 0 && now >= startTime && now - startTime < 5 * 60 * 60 * 1000));
+            (now > 0 && now >= startTime && now - startTime < 5 * 60 * 60 * 1000));
 
-        const isFav =
-          t.has_chilean ||
-          favPlayers.some(
-            (f) =>
-              t.player1_name.toLowerCase().includes(f) ||
-              t.player2_name.toLowerCase().includes(f)
-          );
         items.push({
           sport: "tennis",
           sortTime: startTime,
-          isPriority: isFav,
+          isPriority: isChilean || isTopTen || isUserFav,
           isLive,
           isFinished,
           data: t,
         });
       }
     }
+
+
 
     return items
       .sort((a, b) => {
@@ -464,90 +498,82 @@ export default function TodayMatchesWidget({
 
             // Renderizado para Tenis
                         // Renderizado para Tenis
-                        const t = item.data;
-                        const hasScore = item.isLive || item.isFinished;
-            
-                        return (
-                          <div
-                            key={`tn-${t.id}`}
-                            className={`${
-                              hasScore ? "w-[225px]" : "w-[195px]"
-                            } shrink-0 px-3 py-2 transition hover:bg-slate-50/90`}
-                          >
-                            {/* Cabecera: Torneo y Hora/Estado */}
-                            <div className="mb-1.5 flex items-center justify-between gap-1 text-[10px]">
-                              <span className="truncate font-medium text-slate-400">
-                                {t.tournament_name}
-                              </span>
-                              {item.isLive ? (
-                                <span className="shrink-0 rounded bg-emerald-100 px-1 font-bold text-emerald-700">
-                                  VIVO
-                                </span>
-                              ) : item.isFinished ? (
-                                <span className="shrink-0 font-semibold text-slate-400">FINAL</span>
-                              ) : (
-                                <span className="shrink-0 font-semibold text-slate-600">
-                                  {formatSantiagoTime(t.match_date)}
-                                </span>
-                              )}
-                            </div>
-            
-                            {/* Filas de tenistas con sets completos sin cortar */}
-                            <div className="space-y-1">
-                              {/* Jugador 1 */}
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex min-w-0 items-center gap-1.5">
-                                  <CountryFlag countryCode={t.player1_country} />
-                                  <span className="truncate text-xs font-semibold text-slate-800">
-                                    {t.player1_name}
-                                  </span>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-1.5 font-mono text-xs">
-                                  {hasScore ? (
-                                    <>
-                                      {t.player1_score && (
-                                        <span className="text-[11px] tracking-tight text-slate-500">
-                                          {t.player1_score}
-                                        </span>
-                                      )}
-                                      <span className="min-w-[14px] text-right font-extrabold text-slate-900">
-                                        {t.player1_sets}
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <span className="font-bold text-slate-400">-</span>
-                                  )}
-                                </div>
-                              </div>
-            
-                              {/* Jugador 2 */}
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex min-w-0 items-center gap-1.5">
-                                  <CountryFlag countryCode={t.player2_country} />
-                                  <span className="truncate text-xs font-semibold text-slate-800">
-                                    {t.player2_name}
-                                  </span>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-1.5 font-mono text-xs">
-                                  {hasScore ? (
-                                    <>
-                                      {t.player2_score && (
-                                        <span className="text-[11px] tracking-tight text-slate-500">
-                                          {t.player2_score}
-                                        </span>
-                                      )}
-                                      <span className="min-w-[14px] text-right font-extrabold text-slate-900">
-                                        {t.player2_sets}
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <span className="font-bold text-slate-400">-</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
+                                    // Renderizado para Tenis
+            const t = item.data;
+
+            return (
+              <div
+                key={`tn-${t.id}`}
+                className={`${
+                  item.isFinished ? "w-[225px]" : "w-[195px]"
+                } shrink-0 px-3 py-2 transition hover:bg-slate-50/90`}
+              >
+                {/* Cabecera: Torneo y Estado (EN CURSO en verde o FINAL) */}
+                <div className="mb-1.5 flex items-center justify-between gap-1 text-[10px]">
+                  <span className="truncate font-medium text-slate-400">
+                    {t.tournament_name}
+                  </span>
+                  {item.isLive ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>
+                      EN CURSO
+                    </span>
+                  ) : item.isFinished ? (
+                    <span className="shrink-0 font-semibold text-slate-400">FINAL</span>
+                  ) : (
+                    <span className="shrink-0 font-semibold text-slate-600">
+                      {formatSantiagoTime(t.match_date)}
+                    </span>
+                  )}
+                </div>
+
+                {/* Filas de tenistas: sets ocultos mientras está en curso; visibles con parciales al finalizar */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <CountryFlag countryCode={t.player1_country} />
+                      <span className="truncate text-xs font-semibold text-slate-800">
+                        {t.player1_name}
+                      </span>
+                    </div>
+                    {item.isFinished && (
+                      <div className="flex shrink-0 items-center gap-1.5 font-mono text-xs">
+                        {t.player1_score && (
+                          <span className="text-[11px] tracking-tight text-slate-500">
+                            {t.player1_score}
+                          </span>
+                        )}
+                        <span className="min-w-[14px] text-right font-extrabold text-slate-900">
+                          {t.player1_sets}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <CountryFlag countryCode={t.player2_country} />
+                      <span className="truncate text-xs font-semibold text-slate-800">
+                        {t.player2_name}
+                      </span>
+                    </div>
+                    {item.isFinished && (
+                      <div className="flex shrink-0 items-center gap-1.5 font-mono text-xs">
+                        {t.player2_score && (
+                          <span className="text-[11px] tracking-tight text-slate-500">
+                            {t.player2_score}
+                          </span>
+                        )}
+                        <span className="min-w-[14px] text-right font-extrabold text-slate-900">
+                          {t.player2_sets}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+
           })
         )}
       </div>
