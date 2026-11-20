@@ -123,13 +123,9 @@ export async function GET(request: NextRequest) {
 
     const host = ["v3", "football", "api-sports", "io"].join(".");
     const baseUrl = `https://${host}/fixtures`;
-
-    let endpoint = `${baseUrl}?date=${todayStr}&timezone=America/Santiago`;
-    if (!needsDailySync && pendingMatches && pendingMatches.length > 0) {
-      const idsParam = pendingMatches.slice(0, 20).map((m) => m.id).join("-");
-      endpoint = `${baseUrl}?ids=${idsParam}&timezone=America/Santiago`;
-    }
-
+  // En plan Free usamos siempre ?date= (1 sola petición trae programación y resultados en vivo/finales del día)
+    const endpoint = `${baseUrl}?date=${todayStr}&timezone=America/Santiago`;
+  
     const apiRes = await fetch(endpoint, {
       headers: {
         "x-apisports-key": apiKey,
