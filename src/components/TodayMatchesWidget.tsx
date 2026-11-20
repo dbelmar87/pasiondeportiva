@@ -408,14 +408,15 @@ export default function TodayMatchesWidget({
                   key={`fb-${m.id}`}
                   className="w-[195px] shrink-0 px-3 py-2 transition hover:bg-slate-50/90"
                 >
-                  {/* Cabecera: Liga y Hora/Estado */}
+                  {/* Cabecera: Liga y Estado (solo EN CURSO o FINAL, sin minuto) */}
                   <div className="mb-1.5 flex items-center justify-between gap-1 text-[10px]">
                     <span className="truncate font-medium text-slate-400">
                       {m.league_name}
                     </span>
                     {item.isLive ? (
-                      <span className="shrink-0 rounded bg-red-100 px-1 font-bold text-red-600">
-                        {m.elapsed ? `${m.elapsed}'` : "VIVO"}
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>
+                        EN CURSO
                       </span>
                     ) : item.isFinished ? (
                       <span className="shrink-0 font-semibold text-slate-400">FINAL</span>
@@ -426,7 +427,7 @@ export default function TodayMatchesWidget({
                     )}
                   </div>
 
-                  {/* Filas de equipos */}
+                  {/* Filas de equipos: marcador visible SOLO cuando finaliza */}
                   <div className="space-y-1">
                     <div className="flex items-center justify-between gap-1.5">
                       <div className="flex min-w-0 items-center gap-1.5">
@@ -435,9 +436,11 @@ export default function TodayMatchesWidget({
                           {m.home_team}
                         </span>
                       </div>
-                      <span className="text-xs font-bold text-slate-800">
-                        {m.home_score ?? "-"}
-                      </span>
+                      {item.isFinished && (
+                        <span className="shrink-0 text-xs font-bold text-slate-800">
+                          {m.home_score ?? 0}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between gap-1.5">
@@ -447,14 +450,17 @@ export default function TodayMatchesWidget({
                           {m.away_team}
                         </span>
                       </div>
-                      <span className="text-xs font-bold text-slate-800">
-                        {m.away_score ?? "-"}
-                      </span>
+                      {item.isFinished && (
+                        <span className="shrink-0 text-xs font-bold text-slate-800">
+                          {m.away_score ?? 0}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
               );
             }
+
 
             // Renderizado para Tenis
                         // Renderizado para Tenis
