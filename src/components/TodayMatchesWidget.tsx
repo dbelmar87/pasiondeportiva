@@ -159,6 +159,8 @@ export default function TodayMatchesWidget({
   const [tennisMatches, setTennisMatches] = useState<TennisMatchItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [now, setNow] = useState(() => Date.now());
+
   const sliderRef = useRef<HTMLDivElement>(null);
 
   const scrollSlider = (direction: "left" | "right") => {
@@ -205,15 +207,20 @@ export default function TodayMatchesWidget({
     }
 
     fetchAll();
-    const interval = setInterval(fetchAll, 60_000);
+
+    const interval = setInterval(() => {
+      setNow(Date.now());
+      fetchAll();
+    }, 60_000);
+
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
   }, [supabase]);
 
+
   const unifiedList = useMemo(() => {
-    const now = Date.now();
     const favTeams = favoriteTeams
       .map((t) => t.toLowerCase().trim())
       .filter((t) => t.length >= 3);
@@ -292,6 +299,7 @@ export default function TodayMatchesWidget({
     favoritePlayers,
     filter,
     maxItems,
+    now,
   ]);
 
 
