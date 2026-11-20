@@ -159,7 +159,7 @@ export default function TodayMatchesWidget({
   const [tennisMatches, setTennisMatches] = useState<TennisMatchItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState<number>(0);
 
   const sliderRef = useRef<HTMLDivElement>(null);
 
@@ -206,6 +206,7 @@ export default function TodayMatchesWidget({
       }
     }
 
+    setNow(Date.now());
     fetchAll();
 
     const interval = setInterval(() => {
@@ -237,7 +238,7 @@ export default function TodayMatchesWidget({
         const isLive =
           !isFinished &&
           (FOOTBALL_LIVE.has(m.status_short) ||
-            (now >= startTime && now - startTime < 3 * 60 * 60 * 1000));
+          (now > 0 && now >= startTime && now - startTime < 3 * 60 * 60 * 1000));
 
         const isFav = favTeams.some(
           (f) =>
@@ -262,7 +263,7 @@ export default function TodayMatchesWidget({
         const isLive =
           !isFinished &&
           (TENNIS_LIVE.has(t.status_short) ||
-            (now >= startTime && now - startTime < 5 * 60 * 60 * 1000));
+          (now > 0 && now >= startTime && now - startTime < 5 * 60 * 60 * 1000));
 
         const isFav =
           t.has_chilean ||
