@@ -188,18 +188,25 @@ export default function TodayMatchesWidget({
 
   useEffect(() => {
     let isMounted = true;
-
-    async function fetchAll() {
+  
+    // Helper para obtener el rango del día actual en Santiago
+    const getSantiagoRange = () => {
       const todaySantiago = new Intl.DateTimeFormat("en-CA", {
         timeZone: "America/Santiago",
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
       }).format(new Date());
-
-      const start = `${todaySantiago}T00:00:00-03:00`;
-      const end = `${todaySantiago}T23:59:59-03:00`;
-
+  
+      return {
+        start: `${todaySantiago}T00:00:00-03:00`,
+        end: `${todaySantiago}T23:59:59-03:00`,
+      };
+    };
+  
+    async function fetchAll() {
+      const { start, end } = getSantiagoRange();
+  
       const [fRes, tRes] = await Promise.all([
         supabase
           .from("matches")
@@ -212,28 +219,89 @@ export default function TodayMatchesWidget({
           .gte("match_date", start)
           .lte("match_date", end),
       ]);
-
+  
       if (isMounted) {
         if (!fRes.error && fRes.data) setFootballMatches(fRes.data as MatchItem[]);
         if (!tRes.error && tRes.data) setTennisMatches(tRes.data as TennisMatchItem[]);
         setLoading(false);
       }
     }
-
+  
+    // 1. Carga inicial
     setNow(Date.now());
     fetchAll();
-
+  
+    // 2. Suscripción en tiempo real a ambas tablas
+    const channel = supabase
+      .channel("today-matches-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "matches" },
+        (payload) => {
+          if (!isMounted) return;
+          const { start, end } = getSantiagoRange();
+  
+          if (payload.eventType === "UPDATE") {
+            const updated = payload.new as MatchItem;
+            setFootballMatches((prev) =>
+              prev.map((m) => (m.id === updated.id ? updated : m))
+            );
+          } else if (payload.eventType === "INSERT") {
+            const inserted = payload.new as MatchItem;
+            // Solo agregar si corresponde al día de hoy en Santiago
+            if (inserted.match_date >= start && inserted.match_date <= end) {
+              setFootballMatches((prev) =>
+                prev.some((m) => m.id === inserted.id) ? prev : [...prev, inserted]
+              );
+            }
+          } else if (payload.eventType === "DELETE") {
+            setFootballMatches((prev) =>
+              prev.filter((m) => m.id !== payload.old.id)
+            );
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tennis_matches" },
+        (payload) => {
+          if (!isMounted) return;
+          const { start, end } = getSantiagoRange();
+  
+          if (payload.eventType === "UPDATE") {
+            const updated = payload.new as TennisMatchItem;
+            setTennisMatches((prev) =>
+              prev.map((m) => (m.id === updated.id ? updated : m))
+            );
+          } else if (payload.eventType === "INSERT") {
+            const inserted = payload.new as TennisMatchItem;
+            if (inserted.match_date >= start && inserted.match_date <= end) {
+              setTennisMatches((prev) =>
+                prev.some((m) => m.id === inserted.id) ? prev : [...prev, inserted]
+              );
+            }
+          } else if (payload.eventType === "DELETE") {
+            setTennisMatches((prev) =>
+              prev.filter((m) => m.id !== payload.old.id)
+            );
+          }
+        }
+      )
+      .subscribe();
+  
+    // 3. Reloj interno cada minuto (ya no necesita llamar a fetchAll cada 60s)
     const interval = setInterval(() => {
       setNow(Date.now());
-      fetchAll();
     }, 60_000);
-
+  
+    // 4. Limpieza de intervalo y canal Realtime
     return () => {
       isMounted = false;
       clearInterval(interval);
+      supabase.removeChannel(channel);
     };
   }, [supabase]);
-
+  
 
   const unifiedList = useMemo(() => {
     const favTeams = favoriteTeams
@@ -335,7 +403,7 @@ export default function TodayMatchesWidget({
     filter,
     maxItems,
     now,
-  ]);
+  ])
 
 
   const totalCount = footballMatches.length + tennisMatches.length;
@@ -580,6 +648,3 @@ export default function TodayMatchesWidget({
     </section>
   );
 }
-
-
-
