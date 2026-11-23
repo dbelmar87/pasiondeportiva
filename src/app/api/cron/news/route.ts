@@ -19,6 +19,7 @@ function decodeXmlEntities(text: string) {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -114,19 +115,33 @@ const RSS_FEEDS = [
 
 async function generateSafeContent(prompt: string, apiKey: string) {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const modelsToTry = ["gemini-3.5-flash-lite", "gemini-3-flash-preview"];
+  // Priorizamos gemini-2.5-flash (estable) antes del preview para evitar errores 503
+  const modelsToTry = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-3-flash-preview",
+  ];
   let lastError: unknown;
 
   for (const modelName of modelsToTry) {
-    try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: { responseMimeType: "application/json" },
-      });
-      const result = await model.generateContent(prompt);
-      return result.response.text();
-    } catch (err) {
-      lastError = err;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: { responseMimeType: "application/json" },
+        });
+        const result = await model.generateContent(prompt);
+        const text = result.response.text();
+        if (text) return text;
+      } catch (err: any) {
+        lastError = err;
+        const status = err?.status || 0;
+        if (status === 503 && attempt === 1) {
+          await new Promise((res) => setTimeout(res, 2000));
+          continue;
+        }
+        break;
+      }
     }
   }
   throw lastError;
@@ -200,7 +215,7 @@ export async function GET(request: Request) {
         if (createdCount >= 1) break;
 
         if (!isSportsNews(item)) continue;
-        
+
         scannedCount++;
 
         const { data: existingByUrl } = await supabaseAdmin
@@ -252,62 +267,72 @@ export async function GET(request: Request) {
         Nota: En "section" usa solo uno de estos tres valores exactos: "chilenos", "superestrellas" o "torneos".
       `;
 
-        const responseText = await generateSafeContent(
-          prompt,
-          process.env.GEMINI_API_KEY!
-        );
-        const rawText = responseText.replace(/```json|```/g, "").trim();
-        const aiData = JSON.parse(rawText);
+        // Try/catch individual por artículo: si falla uno, continúa con el siguiente del mismo feed
+        try {
+          const responseText = await generateSafeContent(
+            prompt,
+            process.env.GEMINI_API_KEY!
+          );
+          const rawText = responseText.replace(/```json|```/g, "").trim();
+          const aiData = JSON.parse(rawText);
 
-        if (aiData.reject === true || !aiData.title || !aiData.content) {
+          if (aiData.reject === true || !aiData.title || !aiData.content) {
+            continue;
+          }
+
+          let finalSlug = normalizeText(aiData.title)
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/(^-|-$)+/g, "");
+
+          const { data: duplicateSlug } = await supabaseAdmin
+            .from("articles")
+            .select("id")
+            .eq("slug", finalSlug)
+            .maybeSingle();
+
+          if (duplicateSlug) {
+            finalSlug = `${finalSlug}-${Date.now().toString().slice(-4)}`;
+          }
+
+          const validSections = ["chilenos", "superestrellas", "torneos"];
+          const finalSection = validSections.includes(aiData.section)
+            ? aiData.section
+            : feed.defaultSection;
+
+          const coverImage = `/api/og?title=${encodeURIComponent(
+            aiData.title
+          )}&sport=${encodeURIComponent(feed.sport)}&tag=${encodeURIComponent(
+            finalSection
+          )}`;
+
+          const { error: insertError } = await supabaseAdmin
+            .from("articles")
+            .insert({
+              title: aiData.title,
+              slug: finalSlug,
+              content: aiData.content,
+              sport: feed.sport,
+              section: finalSection,
+              cover_image: coverImage,
+              source_url: item.link,
+              status: "published",
+            });
+
+          if (insertError) {
+            errors.push(`Error insertando en Supabase: ${insertError.message}`);
+            continue;
+          }
+
+          createdCount++;
+          publishedTitles.push(aiData.title);
+        } catch (itemErr) {
+          errors.push(
+            `Error procesando "${item.title.slice(0, 40)}..." en ${feed.name}: ${
+              itemErr instanceof Error ? itemErr.message : "desconocido"
+            }`
+          );
           continue;
         }
-
-        let finalSlug = normalizeText(aiData.title)
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/(^-|-$)+/g, "");
-
-        const { data: duplicateSlug } = await supabaseAdmin
-          .from("articles")
-          .select("id")
-          .eq("slug", finalSlug)
-          .maybeSingle();
-
-        if (duplicateSlug) {
-          finalSlug = `${finalSlug}-${Date.now().toString().slice(-4)}`;
-        }
-
-        const validSections = ["chilenos", "superestrellas", "torneos"];
-        const finalSection = validSections.includes(aiData.section)
-          ? aiData.section
-          : feed.defaultSection;
-
-        const coverImage = `/api/og?title=${encodeURIComponent(
-          aiData.title
-        )}&sport=${encodeURIComponent(feed.sport)}&tag=${encodeURIComponent(
-          finalSection
-        )}`;
-
-        const { error: insertError } = await supabaseAdmin
-          .from("articles")
-          .insert({
-            title: aiData.title,
-            slug: finalSlug,
-            content: aiData.content,
-            sport: feed.sport,
-            section: finalSection,
-            cover_image: coverImage,
-            source_url: item.link,
-            status: "published",
-          });
-
-        if (insertError) {
-          errors.push(`Error insertando en Supabase: ${insertError.message}`);
-          continue;
-        }
-
-        createdCount++;
-        publishedTitles.push(aiData.title);
       }
     } catch (err) {
       errors.push(
@@ -316,6 +341,19 @@ export async function GET(request: Request) {
         }`
       );
     }
+  }
+
+  if (createdCount === 0 && errors.length > 0) {
+    return NextResponse.json(
+      {
+        ok: false,
+        created: 0,
+        scanned: scannedCount,
+        published: [],
+        errors,
+      },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({
