@@ -115,33 +115,24 @@ const RSS_FEEDS = [
 
 async function generateSafeContent(prompt: string, apiKey: string) {
   const genAI = new GoogleGenerativeAI(apiKey);
-  // Priorizamos gemini-2.5-flash (estable) antes del preview para evitar errores 503
   const modelsToTry = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-3-flash-preview",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-3.8-flash",
   ];
   let lastError: unknown;
 
   for (const modelName of modelsToTry) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          generationConfig: { responseMimeType: "application/json" },
-        });
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
-        if (text) return text;
-      } catch (err: any) {
-        lastError = err;
-        const status = err?.status || 0;
-        if (status === 503 && attempt === 1) {
-          await new Promise((res) => setTimeout(res, 2000));
-          continue;
-        }
-        break;
-      }
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: { responseMimeType: "application/json" },
+      });
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      if (text) return text;
+    } catch (err) {
+      lastError = err;
     }
   }
   throw lastError;
@@ -173,6 +164,8 @@ export async function GET(request: Request) {
 
   let createdCount = 0;
   let scannedCount = 0;
+  let aiAttempts = 0;
+  const MAX_AI_ATTEMPTS = 2;
   const publishedTitles: string[] = [];
   const errors: string[] = [];
   const MAX_AGE_MS = 8 * 60 * 60 * 1000; // Últimas 8 horas para priorizar primicias
@@ -266,6 +259,9 @@ export async function GET(request: Request) {
         }
         Nota: En "section" usa solo uno de estos tres valores exactos: "chilenos", "superestrellas" o "torneos".
       `;
+
+        if (aiAttempts >= MAX_AI_ATTEMPTS) break;
+        aiAttempts++;
 
         // Try/catch individual por artículo: si falla uno, continúa con el siguiente del mismo feed
         try {
