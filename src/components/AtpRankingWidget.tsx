@@ -106,8 +106,13 @@ export default function AtpRankingWidget({
     fetchRankings();
   }, [supabase]);
 
+  const isChile = (country?: string) => {
+    const code = (country || "").trim().toUpperCase();
+    return code === "CHI" || code === "CHL";
+  };
+
   const filtered = players
-    .filter((p) => (tab === "chile" ? p.is_chilean : p.rank <= 10))
+    .filter((p) => (tab === "chile" ? isChile(p.country) : p.rank <= 10))
     .sort((a, b) => a.rank - b.rank);
 
   return (
