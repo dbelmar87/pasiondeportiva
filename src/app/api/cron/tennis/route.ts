@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const CHILEAN_PLAYERS = [
+const CHILEAN_ATP_PLAYERS = [
   "tabilo",
   "jarry",
   "garin",
-  "barrios",
-  "soto",
-  "lama",
-  "nunez",
+  "barrios vera",
+  "tomas barrios",
+  "matias soto",
+  "gonzalo lama",
+  "diego fernandez",
 ];
 
-const STAR_PLAYERS = [
-  "alcaraz",
+const TOP10_ATP_PLAYERS = [
   "sinner",
+  "alcaraz",
   "zverev",
   "djokovic",
   "medvedev",
@@ -21,23 +22,44 @@ const STAR_PLAYERS = [
   "shelton",
   "ruud",
   "rublev",
-  "tiafoe",
-  "cobolli",
-  "fils",
+  "de minaur",
+  "dimitrov",
+];
+
+const TOP10_WTA_PLAYERS = [
+  "rybakina",
+  "sabalenka",
+  "andreeva",
+  "gauff",
+  "pegula",
+  "svitolina",
+  "muchova",
+  "noskova",
+  "swiatek",
+  "świątek",
+  "kostyuk",
 ];
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function isChilean(name: string, countryCode?: string): boolean {
-  const code = countryCode?.toUpperCase();
-  if (code === "CHL" || code === "CHI") return true;
-  const lower = name.toLowerCase();
-  return CHILEAN_PLAYERS.some((p) => lower.includes(p));
+function isChileanByCountry(countryCode?: string): boolean {
+  const code = (countryCode || "").trim().toUpperCase();
+  return code === "CHL" || code === "CHI";
 }
 
-function isStar(name: string): boolean {
+function isChileanPlayer(name: string, countryCode?: string): boolean {
+  if (isChileanByCountry(countryCode)) return true;
   const lower = name.toLowerCase();
-  return STAR_PLAYERS.some((p) => lower.includes(p));
+  return CHILEAN_ATP_PLAYERS.some((p) => lower.includes(p));
+}
+
+function isStarPlayer(name: string, isWomensTour: boolean): boolean {
+  const lower = name.toLowerCase();
+  if (isWomensTour) {
+    // En circuito femenino SOLO pasan jugadoras del Top 10 WTA
+    return TOP10_WTA_PLAYERS.some((p) => lower.includes(p));
+  }
+  return TOP10_ATP_PLAYERS.some((p) => lower.includes(p));
 }
 
 function mapEventToRow(ev: any, nowIso: string) {
@@ -46,9 +68,25 @@ function mapEventToRow(ev: any, nowIso: string) {
   const p1Country = ev.homeTeam?.country?.alpha3 || "";
   const p2Country = ev.awayTeam?.country?.alpha3 || "";
 
+  const categoryName = (ev.tournament?.category?.name || "").toLowerCase();
+  const tournamentName = (
+    ev.tournament?.uniqueTournament?.name ||
+    ev.tournament?.name ||
+    ""
+  ).toLowerCase();
+
+  const isWomensTour =
+    categoryName.includes("wta") ||
+    tournamentName.includes("wta") ||
+    tournamentName.includes("women") ||
+    tournamentName.includes("femenino");
+
   const hasChilean =
-    isChilean(p1Name, p1Country) || isChilean(p2Name, p2Country);
-  const hasStar = isStar(p1Name) || isStar(p2Name);
+    !isWomensTour &&
+    (isChileanPlayer(p1Name, p1Country) || isChileanPlayer(p2Name, p2Country));
+
+  const hasStar =
+    isStarPlayer(p1Name, isWomensTour) || isStarPlayer(p2Name, isWomensTour);
 
   const statusType = ev.status?.type;
   let statusShort = "NS";
@@ -73,16 +111,16 @@ function mapEventToRow(ev: any, nowIso: string) {
     tournament_name:
       ev.tournament?.uniqueTournament?.name ||
       ev.tournament?.name ||
-      "ATP Tour",
+      (isWomensTour ? "WTA Tour" : "ATP Tour"),
     round_name: ev.roundInfo?.name || "",
     match_date: new Date((ev.startTimestamp || 0) * 1000).toISOString(),
     status_short: statusShort,
     player1_name: p1Name,
-    player1_country: p1Country === "CHL" ? "CHI" : p1Country || "ATP",
+    player1_country: p1Country === "CHL" ? "CHI" : p1Country || (isWomensTour ? "WTA" : "ATP"),
     player1_sets: Number(ev.homeScore?.current ?? 0),
     player1_score: p1Games,
     player2_name: p2Name,
-    player2_country: p2Country === "CHL" ? "CHI" : p2Country || "ATP",
+    player2_country: p2Country === "CHL" ? "CHI" : p2Country || (isWomensTour ? "WTA" : "ATP"),
     player2_sets: Number(ev.awayScore?.current ?? 0),
     player2_score: p2Games,
     has_chilean: hasChilean,
@@ -132,7 +170,7 @@ export async function GET(request: NextRequest) {
     let requestsUsed = 0;
     const rowsToUpsert = new Map<string, any>();
 
-    // 1. Revisar si quedaron partidos en "LIVE" en Supabase para verificar si ya terminaron
+    // 1. Revisar partidos en "LIVE" en Supabase para verificar si terminaron
     const { data: pendingLive } = await supabase
       .from("tennis_matches")
       .select("id")
@@ -243,10 +281,10 @@ export async function GET(request: NextRequest) {
 
         const rankingsToSave = rawRankings
           .filter((r: any) => {
-            const name = r.team?.name || r.rowName || "";
             const country = r.country?.alpha3 || r.team?.country?.alpha3 || "";
             const rank = Number(r.ranking ?? r.team?.ranking ?? 9999);
-            return rank <= 10 || isChilean(name, country);
+            // Filtro estricto por código de país CHI/CHL (evita falsos positivos como Pablo Llamas Ruiz)
+            return rank <= 10 || isChileanByCountry(country);
           })
           .map((r: any) => {
             const name = r.team?.name || r.rowName || "";
@@ -258,13 +296,12 @@ export async function GET(request: NextRequest) {
               rank,
               country: country === "CHL" ? "CHI" : country || "ATP",
               points: Number(r.points) || 0,
-              is_chilean: isChilean(name, country),
+              is_chilean: isChileanByCountry(country),
               updated_at: nowIso,
             };
           });
 
         if (rankingsToSave.length > 0) {
-          await supabase.from("atp_rankings").delete().neq("rank", -1);
           const { error: rankErr } = await supabase
             .from("atp_rankings")
             .upsert(rankingsToSave, { onConflict: "player_name" });
@@ -286,6 +323,7 @@ export async function GET(request: NextRequest) {
       matches: finalMatches,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json(
+      { error: err?.message || "Error inesperado en cron de tenis" })
+    }
   }
-}
