@@ -1,27 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// 1. Ligas prioritarias (Chile, Copas Continentales y las 4 grandes de Europa)
-const IMPORTANT_LEAGUE_IDS = new Set([
-  265, // Primera División de Chile
-  267, // Copa Chile
-  13,  // CONMEBOL Libertadores
-  11,  // CONMEBOL Sudamericana
-  34,  // Eliminatorias Sudamericanas
-  10,  // Amistosos Internacionales (La Roja)
-  9,   // Copa América
-  1,   // Mundial
-  2,   // UEFA Champions League
-  3,   // UEFA Europa League
-  39,  // Premier League (Inglaterra)
-  140, // La Liga (España)
-  135, // Serie A (Italia)
-  78,  // Bundesliga (Alemania)
-]);
+// Ligas equivalentes a tu lista prioritaria + ligas de Al-Nassr e Inter Miami
+const ESPN_LEAGUES = [
+  { slug: "chi.1", id: 265, name: "Primera División de Chile", country: "Chile", isImportant: true },
+  { slug: "chi.copa_chi", id: 267, name: "Copa Chile", country: "Chile", isImportant: true },
+  { slug: "conmebol.libertadores", id: 13, name: "CONMEBOL Libertadores", country: "Sudamérica", isImportant: true },
+  { slug: "conmebol.sudamericana", id: 11, name: "CONMEBOL Sudamericana", country: "Sudamérica", isImportant: true },
+  { slug: "fifa.worldq.conmebol", id: 34, name: "Eliminatorias Sudamericanas", country: "Sudamérica", isImportant: true },
+  { slug: "fifa.friendly", id: 10, name: "Amistosos Internacionales", country: "Mundo", isImportant: true },
+  { slug: "conmebol.america", id: 9, name: "Copa América", country: "Sudamérica", isImportant: true },
+  { slug: "fifa.world", id: 1, name: "Mundial", country: "Mundo", isImportant: true },
+  { slug: "uefa.champions", id: 2, name: "UEFA Champions League", country: "Europa", isImportant: true },
+  { slug: "uefa.europa", id: 3, name: "UEFA Europa League", country: "Europa", isImportant: true },
+  { slug: "eng.1", id: 39, name: "Premier League", country: "Inglaterra", isImportant: true },
+  { slug: "esp.1", id: 140, name: "La Liga", country: "España", isImportant: true },
+  { slug: "ita.1", id: 135, name: "Serie A", country: "Italia", isImportant: true },
+  { slug: "ger.1", id: 78, name: "Bundesliga", country: "Alemania", isImportant: true },
+  // Ligas secundarias para capturar clubes destacados (Al-Nassr / Inter Miami) o favoritos de fans
+  { slug: "ksa.1", id: 307, name: "Saudi Pro League", country: "Arabia Saudita", isImportant: false },
+  { slug: "usa.1", id: 253, name: "MLS", country: "Estados Unidos", isImportant: false },
+  { slug: "arg.1", id: 128, name: "Liga Profesional Argentina", country: "Argentina", isImportant: false },
+];
 
-// 2. Clubes destacados fijos del portal (aunque jueguen ligas fuera de Europa/Chile)
 const FEATURED_CLUBS = ["al-nassr", "al nassr", "inter miami"];
-
 
 function getTodaySantiago(): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -30,6 +32,15 @@ function getTodaySantiago(): string {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
+}
+
+function getEspnDatesRange(todaySantiago: string): string {
+  // Consultamos hoy y mañana en UTC para cubrir partidos de tarde/noche en Chile (-03:00)
+  const [y, m, d] = todaySantiago.split("-").map(Number);
+  const startUtc = new Date(Date.UTC(y, m - 1, d));
+  const endUtc = new Date(startUtc.getTime() + 24 * 60 * 60 * 1000);
+  const fmt = (dt: Date) => dt.toISOString().slice(0, 10).replace(/-/g, "");
+  return `${fmt(startUtc)}-${fmt(endUtc)}`;
 }
 
 function makeShortName(name: string): string {
@@ -52,14 +63,6 @@ export async function GET(request: NextRequest) {
     secretParam !== cronSecret
   ) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
-
-  const apiKey = process.env.API_FOOTBALL_KEY?.trim();
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "Falta configurar API_FOOTBALL_KEY en variables de entorno" },
-      { status: 500 }
-    );
   }
 
   const supabase = createClient(
@@ -89,8 +92,7 @@ export async function GET(request: NextRequest) {
 
     const needsDailySync = mode === "daily" || !todayCount || todayCount === 0;
 
-        // Solo buscamos partidos que empezaron hace al menos 100 min (recta final)
-    // y hace máximo 165 min (2h 45m, cubre alargue y penales)
+    // Freno inteligente: solo actualiza en vivo si hay partidos en la ventana de cierre (100 a 165 min)
     const minFinishedTime = new Date(Date.now() - 100 * 60 * 1000).toISOString();
     const maxWindowTime = new Date(Date.now() - 165 * 60 * 1000).toISOString();
 
@@ -101,15 +103,15 @@ export async function GET(request: NextRequest) {
       .lte("match_date", minFinishedTime)
       .not("status_short", "in", '("FT","AET","PEN","PST","CANC","SUSP","INT","ABD")');
 
-
     if (!needsDailySync && (!pendingMatches || pendingMatches.length === 0)) {
       return NextResponse.json({
         ok: true,
         apiCallsUsed: 0,
-        message: "Sin partidos en curso o pendientes de cierre. Cero peticiones consumidas.",
+        message: "Sin partidos pendientes de cierre. Cero consultas realizadas.",
       });
     }
 
+    // Leer equipos favoritos de los usuarios
     const { data: fans } = await supabase
       .from("fan_profiles")
       .select("favorite_teams");
@@ -123,107 +125,127 @@ export async function GET(request: NextRequest) {
       });
     });
 
-    const host = ["v3", "football", "api-sports", "io"].join(".");
-    const baseUrl = `https://${host}/fixtures`;
-  // En plan Free usamos siempre ?date= (1 sola petición trae programación y resultados en vivo/finales del día)
-    const endpoint = `${baseUrl}?date=${todayStr}&timezone=America/Santiago`;
-  
-    const apiRes = await fetch(endpoint, {
-      headers: {
-        "x-apisports-key": apiKey,
-      },
-      cache: "no-store",
-    });
+    const datesRange = getEspnDatesRange(todayStr);
+    const nowIso = new Date().toISOString();
+    const rowsToUpsert: any[] = [];
+    let totalFetched = 0;
 
-    if (!apiRes.ok) {
-      const errorBody = await apiRes.text();
-      return NextResponse.json(
-        {
-          error: `Error HTTP de API-Football: ${apiRes.status}`,
-          details: errorBody,
-          sentDate: todayStr,
-        },
-        { status: 502 }
-      );
-    }
+    await Promise.all(
+      ESPN_LEAGUES.map(async (league) => {
+        try {
+          const url = `https://espn.com{league.slug}/scoreboard?dates=${datesRange}`;
+          const res = await fetch(url, {
+            cache: "no-store",
+            headers: {
+              "User-Agent": "Mozilla/5.0 (compatible; PasionDeportiva/1.0)",
+            },
+          });
 
-    const apiData = await apiRes.json();
+          if (!res.ok) return;
 
-    if (apiData.errors && Object.keys(apiData.errors).length > 0) {
-      return NextResponse.json(
-        { error: "API-Football devolvió un error", details: apiData.errors },
-        { status: 400 }
-      );
-    }
+          const data = await res.json();
+          const leagueLogo = data?.leagues?.[0]?.logos?.[0]?.href || "";
+          const events = data?.events || [];
+          totalFetched += events.length;
 
-    const fixtures = apiData.response || [];
+          for (const ev of events) {
+            const matchIso = new Date(ev.date).toISOString();
+            // Filtrar estrictamente partidos que caen en el día actual de Santiago
+            if (matchIso < startOfDay || matchIso > endOfDay) continue;
 
-    const relevantFixtures = fixtures.filter((item: any) => {
-      const leagueId = item.league?.id;
-      const homeName = (item.teams?.home?.name || "").toLowerCase();
-      const awayName = (item.teams?.away?.name || "").toLowerCase();
+            const comp = ev.competitions?.[0];
+            const competitors = comp?.competitors || [];
+            const home = competitors.find((c: any) => c.homeAway === "home") || competitors[0];
+            const away = competitors.find((c: any) => c.homeAway === "away") || competitors[1];
 
-      const isImportantLeague = IMPORTANT_LEAGUE_IDS.has(leagueId);
-      const isFeaturedClub = FEATURED_CLUBS.some(
-        (club) => homeName.includes(club) || awayName.includes(club)
-      );
-      const isFollowedClub = Array.from(followedTeams).some(
-        (fav) => homeName.includes(fav) || awayName.includes(fav)
-      );
+            if (!home || !away) continue;
 
-      return isImportantLeague || isFeaturedClub || isFollowedClub;
-    });
+            const homeName = home.team?.shortDisplayName || home.team?.displayName || "Local";
+            const awayName = away.team?.shortDisplayName || away.team?.displayName || "Visita";
+            const homeLower = homeName.toLowerCase();
+            const awayLower = awayName.toLowerCase();
 
+            const isFeaturedClub = FEATURED_CLUBS.some(
+              (club) => homeLower.includes(club) || awayLower.includes(club)
+            );
+            const isFollowedClub = Array.from(followedTeams).some(
+              (fav) => homeLower.includes(fav) || awayLower.includes(fav)
+            );
 
-    if (relevantFixtures.length > 0) {
-      const rows = relevantFixtures.map((item: any) => ({
-        home_logo: item.teams.home.logo || "",
-        away_logo: item.teams.away.logo || "",
-        league_logo: item.league.logo || "",
-        id: item.fixture.id,
-        league_id: item.league.id,
-        league_name: item.league.name,
-        league_country: item.league.country || "",
-        match_date: item.fixture.date,
-        status_short: item.fixture.status.short,
-        elapsed: item.fixture.status.elapsed,
-        home_team: item.teams.home.name,
-        home_short: makeShortName(item.teams.home.name),
-        home_score: item.goals.home,
-        away_team: item.teams.away.name,
-        away_short: makeShortName(item.teams.away.name),
-        away_score: item.goals.away,
-        is_important: IMPORTANT_LEAGUE_IDS.has(item.league.id),
-        updated_at: new Date().toISOString(),
-      }));
+            // Si no es liga prioritaria, solo guardar si juega Al-Nassr, Inter Miami o un equipo seguido
+            if (!league.isImportant && !isFeaturedClub && !isFollowedClub) {
+              continue;
+            }
 
+            const state = ev.status?.type?.state; // "pre" | "in" | "post"
+            const statusName = ev.status?.type?.name || "";
+            let statusShort = "NS";
+            if (state === "in") {
+              statusShort = ev.status?.type?.shortDetail === "HT" ? "HT" : "LIVE";
+            } else if (state === "post") {
+              if (statusName.includes("POSTPONED")) statusShort = "PST";
+              else if (statusName.includes("CANCELED")) statusShort = "CANC";
+              else statusShort = "FT";
+            }
+
+            const clockStr = String(ev.status?.displayClock || "");
+            const elapsedMatch = clockStr.match(/^(\d+)/);
+            const elapsed = state === "in" && elapsedMatch ? Number(elapsedMatch[1]) : null;
+
+            const numericId = Number(String(ev.id).replace(/\D/g, ""));
+            if (!numericId) continue;
+
+            rowsToUpsert.push({
+              home_logo: home.team?.logo || "",
+              away_logo: away.team?.logo || "",
+              league_logo: leagueLogo,
+              id: numericId,
+              league_id: league.id,
+              league_name: league.name,
+              league_country: league.country,
+              match_date: matchIso,
+              status_short: statusShort,
+              elapsed,
+              home_team: homeName,
+              home_short: (home.team?.abbreviation || makeShortName(homeName)).slice(0, 4).toUpperCase(),
+              home_score: state === "pre" ? null : Number(home.score ?? 0),
+              away_team: awayName,
+              away_short: (away.team?.abbreviation || makeShortName(awayName)).slice(0, 4).toUpperCase(),
+              away_score: state === "pre" ? null : Number(away.score ?? 0),
+              is_important: league.isImportant,
+              updated_at: nowIso,
+            });
+          }
+        } catch {
+          // Ignorar fallo individual de una liga para no detener las demás
+        }
+      })
+    );
+
+    if (rowsToUpsert.length > 0) {
       const { error: upsertError } = await supabase
         .from("matches")
-        .upsert(rows, { onConflict: "id" });
+        .upsert(rowsToUpsert, { onConflict: "id" });
 
-      if (upsertError) {
-        return NextResponse.json(
-          { error: `Error guardando en Supabase: ${upsertError.message}` },
-          { status: 500 }
-        );
+        if (upsertError) {
+          return NextResponse.json(
+            { error: `Error guardando en Supabase: ${upsertError.message}` },
+            { status: 500 }
+          );
+        }
       }
+  
+      return NextResponse.json({
+        ok: true,
+        provider: "ESPN",
+        mode: needsDailySync ? "daily" : "live",
+        date: todayStr,
+        totalFetched,
+        savedMatches: rowsToUpsert.length,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error inesperado";
+      return NextResponse.json({ error: msg }, { status: 500 });
     }
-
-    return NextResponse.json({
-      ok: true,
-      mode: needsDailySync ? "daily" : "live",
-      date: todayStr,
-      apiCallsUsed: 1,
-      totalFetched: fixtures.length,
-      savedMatches: relevantFixtures.length,
-    });
-} catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Error inesperado";
-    const cause =
-      err instanceof Error && err.cause
-        ? String((err.cause as any)?.message || err.cause)
-        : undefined;
-    return NextResponse.json({ error: msg, cause }, { status: 500 });
   }
-
-}
+  
