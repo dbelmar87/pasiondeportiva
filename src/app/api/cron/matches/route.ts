@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Ligas equivalentes a tu lista prioritaria + ligas de Al-Nassr e Inter Miami
 const ESPN_LEAGUES = [
   { slug: "chi.1", id: 265, name: "Primera División de Chile", country: "Chile", isImportant: true },
   { slug: "chi.copa_chi", id: 267, name: "Copa Chile", country: "Chile", isImportant: true },
@@ -17,7 +16,6 @@ const ESPN_LEAGUES = [
   { slug: "esp.1", id: 140, name: "La Liga", country: "España", isImportant: true },
   { slug: "ita.1", id: 135, name: "Serie A", country: "Italia", isImportant: true },
   { slug: "ger.1", id: 78, name: "Bundesliga", country: "Alemania", isImportant: true },
-  // Ligas secundarias para capturar clubes destacados (Al-Nassr / Inter Miami) o favoritos de fans
   { slug: "ksa.1", id: 307, name: "Saudi Pro League", country: "Arabia Saudita", isImportant: false },
   { slug: "usa.1", id: 253, name: "MLS", country: "Estados Unidos", isImportant: false },
   { slug: "arg.1", id: 128, name: "Liga Profesional Argentina", country: "Argentina", isImportant: false },
@@ -32,15 +30,6 @@ function getTodaySantiago(): string {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
-}
-
-function getEspnDatesRange(todaySantiago: string): string {
-  // Consultamos hoy y mañana en UTC para cubrir partidos de tarde/noche en Chile (-03:00)
-  const [y, m, d] = todaySantiago.split("-").map(Number);
-  const startUtc = new Date(Date.UTC(y, m - 1, d));
-  const endUtc = new Date(startUtc.getTime() + 24 * 60 * 60 * 1000);
-  const fmt = (dt: Date) => dt.toISOString().slice(0, 10).replace(/-/g, "");
-  return `${fmt(startUtc)}-${fmt(endUtc)}`;
 }
 
 function makeShortName(name: string): string {
@@ -111,7 +100,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Leer equipos favoritos de los usuarios
     const { data: fans } = await supabase
       .from("fan_profiles")
       .select("favorite_teams");
@@ -125,7 +113,9 @@ export async function GET(request: NextRequest) {
       });
     });
 
-    const datesRange = getEspnDatesRange(todayStr);
+    // Fecha única YYYYMMDD requerida por ESPN
+    const espnDate = todayStr.replace(/-/g, "");
+    const espnHost = ["site", "api", "espn", "com"].join(".");
     const nowIso = new Date().toISOString();
     const rowsToUpsert: any[] = [];
     let totalFetched = 0;
@@ -133,7 +123,7 @@ export async function GET(request: NextRequest) {
     await Promise.all(
       ESPN_LEAGUES.map(async (league) => {
         try {
-          const url = `https://espn.com{league.slug}/scoreboard?dates=${datesRange}`;
+          const url = `https://${espnHost}/apis/site/v2/sports/soccer/${league.slug}/scoreboard?dates=${espnDate}`;
           const res = await fetch(url, {
             cache: "no-store",
             headers: {
@@ -150,18 +140,21 @@ export async function GET(request: NextRequest) {
 
           for (const ev of events) {
             const matchIso = new Date(ev.date).toISOString();
-            // Filtrar estrictamente partidos que caen en el día actual de Santiago
             if (matchIso < startOfDay || matchIso > endOfDay) continue;
 
             const comp = ev.competitions?.[0];
             const competitors = comp?.competitors || [];
-            const home = competitors.find((c: any) => c.homeAway === "home") || competitors[0];
-            const away = competitors.find((c: any) => c.homeAway === "away") || competitors[1];
+            const home =
+              competitors.find((c: any) => c.homeAway === "home") || competitors[0];
+            const away =
+              competitors.find((c: any) => c.homeAway === "away") || competitors[1];
 
             if (!home || !away) continue;
 
-            const homeName = home.team?.shortDisplayName || home.team?.displayName || "Local";
-            const awayName = away.team?.shortDisplayName || away.team?.displayName || "Visita";
+            const homeName =
+              home.team?.shortDisplayName || home.team?.displayName || "Local";
+            const awayName =
+              away.team?.shortDisplayName || away.team?.displayName || "Visita";
             const homeLower = homeName.toLowerCase();
             const awayLower = awayName.toLowerCase();
 
@@ -172,7 +165,6 @@ export async function GET(request: NextRequest) {
               (fav) => homeLower.includes(fav) || awayLower.includes(fav)
             );
 
-            // Si no es liga prioritaria, solo guardar si juega Al-Nassr, Inter Miami o un equipo seguido
             if (!league.isImportant && !isFeaturedClub && !isFollowedClub) {
               continue;
             }
@@ -190,7 +182,8 @@ export async function GET(request: NextRequest) {
 
             const clockStr = String(ev.status?.displayClock || "");
             const elapsedMatch = clockStr.match(/^(\d+)/);
-            const elapsed = state === "in" && elapsedMatch ? Number(elapsedMatch[1]) : null;
+            const elapsed =
+              state === "in" && elapsedMatch ? Number(elapsedMatch[1]) : null;
 
             const numericId = Number(String(ev.id).replace(/\D/g, ""));
             if (!numericId) continue;
@@ -207,17 +200,21 @@ export async function GET(request: NextRequest) {
               status_short: statusShort,
               elapsed,
               home_team: homeName,
-              home_short: (home.team?.abbreviation || makeShortName(homeName)).slice(0, 4).toUpperCase(),
+              home_short: (home.team?.abbreviation || makeShortName(homeName))
+                .slice(0, 4)
+                .toUpperCase(),
               home_score: state === "pre" ? null : Number(home.score ?? 0),
               away_team: awayName,
-              away_short: (away.team?.abbreviation || makeShortName(awayName)).slice(0, 4).toUpperCase(),
+              away_short: (away.team?.abbreviation || makeShortName(awayName))
+                .slice(0, 4)
+                .toUpperCase(),
               away_score: state === "pre" ? null : Number(away.score ?? 0),
               is_important: league.isImportant,
               updated_at: nowIso,
             });
           }
         } catch {
-          // Ignorar fallo individual de una liga para no detener las demás
+          // Ignorar error individual de una liga para no detener las demás
         }
       })
     );
@@ -227,25 +224,24 @@ export async function GET(request: NextRequest) {
         .from("matches")
         .upsert(rowsToUpsert, { onConflict: "id" });
 
-        if (upsertError) {
-          return NextResponse.json(
-            { error: `Error guardando en Supabase: ${upsertError.message}` },
-            { status: 500 }
-          );
-        }
+      if (upsertError) {
+        return NextResponse.json(
+          { error: `Error guardando en Supabase: ${upsertError.message}` },
+          { status: 500 }
+        );
       }
-  
-      return NextResponse.json({
-        ok: true,
-        provider: "ESPN",
-        mode: needsDailySync ? "daily" : "live",
-        date: todayStr,
-        totalFetched,
-        savedMatches: rowsToUpsert.length,
-      });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error inesperado";
-      return NextResponse.json({ error: msg }, { status: 500 });
     }
+
+    return NextResponse.json({
+      ok: true,
+      provider: "ESPN",
+      mode: needsDailySync ? "daily" : "live",
+      date: todayStr,
+      totalFetched,
+      savedMatches: rowsToUpsert.length,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Error inesperado";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
-  
+}
