@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase-browser";
-import TeamAutocomplete from "./TeamAutocomplete";
 import { FAN_AVATARS, FanAvatar } from "./FanAvatar";
 
 export interface FanProfileData {
@@ -11,7 +10,6 @@ export interface FanProfileData {
   avatar_id?: string | null;
   favorite_teams: string[];
   favorite_player: string;
-  memorable_match: string;
   notify_news: boolean;
   notify_live_scores: boolean;
   instagram_handle?: string | null;
@@ -38,11 +36,9 @@ export default function FanCardForm({
 
   const [nickname, setNickname] = useState(initialData?.nickname || "");
   const [avatarId, setAvatarId] = useState(
-    initialData?.avatar_id || "escudo-roja"
+    initialData?.avatar_id || "cl-roja"
   );
-  const [avatarTab, setAvatarTab] = useState<
-    "escudos" | "deportistas" | "personajes"
-  >("escudos");
+  const [avatarSearch, setAvatarSearch] = useState("");
 
   const [favoriteTeams, setFavoriteTeams] = useState<string[]>(
     initialData?.favorite_teams?.filter(Boolean) || []
@@ -51,9 +47,6 @@ export default function FanCardForm({
 
   const [favoritePlayer, setFavoritePlayer] = useState(
     initialData?.favorite_player || ""
-  );
-  const [memorableMatch, setMemorableMatch] = useState(
-    initialData?.memorable_match || ""
   );
   const [notifyNews, setNotifyNews] = useState(
     initialData?.notify_news ?? true
@@ -95,7 +88,6 @@ export default function FanCardForm({
     e.preventDefault();
     setError("");
 
-    // Si dejó un equipo escrito en el input sin apretar "Agregar", lo incluimos
     let finalTeams = [...favoriteTeams];
     const pendingTeam = teamQuery.trim();
     if (
@@ -131,7 +123,6 @@ export default function FanCardForm({
       avatar_id: avatarId,
       favorite_teams: finalTeams,
       favorite_player: favoritePlayer.trim(),
-      memorable_match: memorableMatch.trim(),
       notify_news: notifyNews,
       notify_live_scores: notifyLiveScores,
     };
@@ -149,7 +140,13 @@ export default function FanCardForm({
     setSaving(false);
   }
 
-  const filteredAvatars = FAN_AVATARS.filter((a) => a.category === avatarTab);
+  const filteredAvatars = FAN_AVATARS.filter(
+    (item) =>
+      item.label.toLowerCase().includes(avatarSearch.toLowerCase()) ||
+      (item.initials || "")
+        .toLowerCase()
+        .includes(avatarSearch.toLowerCase())
+  );
 
   return (
     <div className="mx-auto max-w-2xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
@@ -160,43 +157,28 @@ export default function FanCardForm({
             {initialData ? "Editar Perfil de Hincha" : "Crea tu Carnet de Hincha"}
           </h2>
           <p className="text-sm text-slate-600">
-            Elige tu avatar, tus camisetas y personaliza tus alertas.
+            Elige tu escudo o deporte favorito, tus camisetas y personaliza tus alertas.
           </p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* 1. Selector de Avatar sin subir fotos */}
+        {/* 1. Selector único de Avatar */}
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              1. Elige tu Avatar de Perfil
+              1. Elige tu Escudo o Deporte Favorito
             </label>
-            <div className="flex rounded-lg bg-slate-200/80 p-0.5 text-xs font-bold">
-              {(
-                [
-                  { key: "escudos", label: "🛡️ Escudos" },
-                  { key: "deportistas", label: "⚽ Deportistas" },
-                  { key: "personajes", label: "🎬 Personajes" },
-                ] as const
-              ).map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => setAvatarTab(tab.key)}
-                  className={`rounded-md px-2.5 py-1 transition ${
-                    avatarTab === tab.key
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+            <input
+              type="text"
+              value={avatarSearch}
+              onChange={(e) => setAvatarSearch(e.target.value)}
+              placeholder="Buscar club o deporte (ej: Colo, RM, Tenis)..."
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-red-500 sm:w-64"
+            />
           </div>
 
-          <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+          <div className="grid max-h-64 grid-cols-3 gap-2.5 overflow-y-auto pr-1 sm:grid-cols-6">
             {filteredAvatars.map((item) => {
               const selected = avatarId === item.id;
               return (
@@ -206,7 +188,7 @@ export default function FanCardForm({
                   onClick={() => setAvatarId(item.id)}
                   className={`flex flex-col items-center gap-1.5 rounded-xl border-2 p-2 text-center transition ${
                     selected
-                      ? "border-red-600 bg-red-50/60 shadow-sm"
+                      ? "border-red-600 bg-red-50/70 shadow-sm"
                       : "border-transparent bg-white hover:border-slate-300"
                   }`}
                 >
@@ -259,12 +241,11 @@ export default function FanCardForm({
                       Principal
                     </span>
                   )}
-                  <span>{team}</span>
+                  {team}
                   <button
                     type="button"
                     onClick={() => handleRemoveTeam(team)}
-                    aria-label={`Quitar ${team}`}
-                    className="ml-0.5 rounded-full px-1 text-slate-300 hover:bg-slate-700 hover:text-white"
+                    className="ml-1 text-slate-400 hover:text-white"
                   >
                     ×
                   </button>
@@ -273,93 +254,127 @@ export default function FanCardForm({
             </div>
           )}
 
-          {favoriteTeams.length < MAX_TEAMS && (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+{favoriteTeams.length < MAX_TEAMS && (
+            <div className="flex gap-2">
               <div className="flex-1">
-                <TeamAutocomplete
-                  label=""
-                  placeholder="Busca Colo-Colo, U. de Chile, Real Madrid..."
-                  type="team"
+                <input
+                  type="text"
+                  list="popular-teams-list"
                   value={teamQuery}
-                  onChange={setTeamQuery}
+                  onChange={(e) => setTeamQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddTeam();
+                    }
+                  }}
+                  placeholder="Busca tu equipo (ej. Colo-Colo, Real Madrid...)"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm outline-none focus:border-red-500"
                 />
+                <datalist id="popular-teams-list">
+                  <option value="Selección Chilena" />
+                  <option value="Colo-Colo" />
+                  <option value="Universidad de Chile" />
+                  <option value="Universidad Católica" />
+                  <option value="Coquimbo Unido" />
+                  <option value="Palestino" />
+                  <option value="Everton" />
+                  <option value="Unión Española" />
+                  <option value="Deportes Iquique" />
+                  <option value="Ñublense" />
+                  <option value="Audax Italiano" />
+                  <option value="O'Higgins" />
+                  <option value="Huachipato" />
+                  <option value="Cobresal" />
+                  <option value="Unión La Calera" />
+                  <option value="Deportes La Serena" />
+                  <option value="Deportes Limache" />
+                  <option value="Real Madrid" />
+                  <option value="FC Barcelona" />
+                  <option value="Atlético Madrid" />
+                  <option value="Real Betis" />
+                  <option value="Sevilla FC" />
+                  <option value="Manchester City" />
+                  <option value="Manchester United" />
+                  <option value="Liverpool" />
+                  <option value="Arsenal" />
+                  <option value="Chelsea" />
+                  <option value="Tottenham" />
+                  <option value="Brighton" />
+                  <option value="Bayern Múnich" />
+                  <option value="Borussia Dortmund" />
+                  <option value="Bayer Leverkusen" />
+                  <option value="Inter de Milán" />
+                  <option value="AC Milan" />
+                  <option value="Juventus" />
+                  <option value="Napoli" />
+                  <option value="AS Roma" />
+                  <option value="Udinese" />
+                  <option value="Torino" />
+                  <option value="Paris Saint-Germain" />
+                  <option value="Midtjylland" />
+                  <option value="Boca Juniors" />
+                  <option value="River Plate" />
+                  <option value="Flamengo" />
+                  <option value="Al-Nassr" />
+                  <option value="Inter Miami" />
+                </datalist>
               </div>
               <button
                 type="button"
                 onClick={() => handleAddTeam()}
-                disabled={!teamQuery.trim()}
-                className="rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800"
               >
-                + Agregar equipo
+                Agregar
               </button>
             </div>
           )}
-                    <p className="mt-2 text-[11px] text-slate-500">
-            El primer equipo será tu camiseta principal en el Carnet Digital. Todos aparecerán en tu feed y marcadores.
-          </p>
         </div>
 
-        {/* 4. Jugador o Tenista */}
-        <div>
-          <TeamAutocomplete
-            label="4. Tu Jugador o Tenista Favorito"
-            placeholder="Busca Tabilo, Alexis, Alcaraz..."
-            type="player"
-            value={favoritePlayer}
-            onChange={setFavoritePlayer}
-          />
-        </div>
-
-        {/* 5. Partido memorable */}
+        {/* 4. Ídolo / Jugador */}
         <div>
           <label className="mb-1 block text-xs font-bold text-slate-700">
-            5. El partido que más recuerdas
+            4. Tu Jugador o Tenista Favorito
           </label>
           <input
             type="text"
-            maxLength={120}
-            value={memorableMatch}
-            onChange={(e) => setMemorableMatch(e.target.value)}
-            placeholder="Ej: Final Copa América 2015 en el Nacional"
+            maxLength={50}
+            value={favoritePlayer}
+            onChange={(e) => setFavoritePlayer(e.target.value)}
+            placeholder="Ej: Alexis Sánchez, Carlos Alcaraz, Alejandro Tabilo..."
             className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm"
           />
         </div>
 
-        {/* 6. Preferencias de Notificaciones */}
-        <div className="space-y-3 rounded-2xl bg-slate-50 p-4">
+        {/* 5. Preferencias de Notificaciones */}
+        <div className="space-y-2 rounded-2xl border border-slate-200 p-4">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-700">
-            6. Notificaciones Inteligentes
+            5. Alertas y Notificaciones
           </p>
-
-          <label className="flex cursor-pointer items-center justify-between">
-            <span className="text-sm text-slate-700">
-              Avisarme cuando haya <strong>noticias nuevas</strong> de mis favoritos
-            </span>
+          <label className="flex items-center gap-2.5 text-sm text-slate-700">
             <input
               type="checkbox"
               checked={notifyNews}
               onChange={(e) => setNotifyNews(e.target.checked)}
-              className="h-5 w-5 accent-red-600"
+              className="h-4 w-4 rounded border-slate-300 text-red-600"
             />
+            Avisarme cuando publiquen noticias de mis equipos o jugadores
           </label>
-
-          <label className="flex cursor-pointer items-center justify-between">
-            <span className="text-sm text-slate-700">
-              Alertas de <strong>marcador en vivo</strong> y partidos clave
-            </span>
+          <label className="flex items-center gap-2.5 text-sm text-slate-700">
             <input
               type="checkbox"
               checked={notifyLiveScores}
               onChange={(e) => setNotifyLiveScores(e.target.checked)}
-              className="h-5 w-5 accent-red-600"
+              className="h-4 w-4 rounded border-slate-300 text-red-600"
             />
+            Notificarme marcadores finales de mis equipos favoritos
           </label>
         </div>
 
         {error && (
-          <div className="rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">
+          <p className="rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-600">
             {error}
-          </div>
+          </p>
         )}
 
         <div className="flex items-center justify-end gap-3 pt-2">
@@ -367,7 +382,7 @@ export default function FanCardForm({
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
             >
               Cancelar
             </button>
@@ -377,10 +392,12 @@ export default function FanCardForm({
             disabled={saving}
             className="rounded-xl bg-red-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-red-700 disabled:opacity-50"
           >
-            {saving ? "Guardando..." : "Guardar Carnet"}
+            {saving ? "Guardando..." : "Guardar Carnet Oficial"}
           </button>
         </div>
       </form>
     </div>
   );
 }
+
+          
