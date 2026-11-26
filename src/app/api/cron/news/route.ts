@@ -34,15 +34,37 @@ interface RssItem {
 }
 
 const BLOCKED_KEYWORDS = [
+  // Espectáculos y TV
   "teleserie", "telenovela", "farandula", "reality", "gran hermano",
   "palabras al cierre", "matinal", "espectaculos", "romance", "polola",
   "quiebre amoroso", "infidelidad", "festival de vina", "mega", "chilevision",
-  "canal 13", "tvn", "rating", "capitulo", "actor", "actriz", "cantante"
+  "canal 13", "tvn", "rating", "capitulo", "actor", "actriz", "cantante",
+  // Guías de TV, horarios y previas clickbait sin noticia real
+  "donde ver", "a que hora", "que canal transmite", "transmision en vivo",
+  "ver en vivo", "ver online", "minuto a minuto", "posible formacion",
+  "probable formacion", "pronostico", "apuestas", "cuotas"
 ];
 
-function isSportsNews(item: RssItem): boolean {
+function isValidFeaturedNews(item: RssItem): boolean {
+  const titleNorm = normalizeText(item.title);
   const fullText = normalizeText(`${item.title} ${item.description}`);
-  return !BLOCKED_KEYWORDS.some((word) => fullText.includes(word));
+
+  // 1. Bloquear farándula y guías de "dónde ver / a qué hora"
+  if (BLOCKED_KEYWORDS.some((word) => fullText.includes(word))) {
+    return false;
+  }
+
+  // 2. Evitar titulares en forma de pregunta clickbait ("¿Dónde ver...?", "¿A qué hora...?")
+  if (titleNorm.startsWith("donde ") || titleNorm.startsWith("¿donde ") || titleNorm.startsWith("a que hora") || titleNorm.startsWith("¿a que hora")) {
+    return false;
+  }
+
+  // 3. Exigir un mínimo de contexto en la descripción para que la IA no escriba notas vacías
+  if (item.description.trim().length < 45) {
+    return false;
+  }
+
+  return true;
 }
 
 function parseGoogleNewsRss(xml: string): RssItem[] {
@@ -50,11 +72,11 @@ function parseGoogleNewsRss(xml: string): RssItem[] {
   const itemMatches = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
 
   for (const itemXml of itemMatches) {
-    const rawTitle = itemXml.match(/<title>([\s\S]*?)<\/title>/)?.[1] || "";
-    const link = itemXml.match(/<link>([\s\S]*?)<\/link>/)?.[1]?.trim() || "";
-    const pubDate = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1]?.trim() || "";
-    const rawDesc = itemXml.match(/<description>([\s\S]*?)<\/description>/)?.[1] || "";
-    const rawSource = itemXml.match(/<source[^>]*>([\s\S]*?)<\/source>/)?.[1] || "";
+    const rawTitle = itemXml.match(/<title>([\s\S]*?)<\/title>/)?. || "";
+    const link = itemXml.match(/<link>([\s\S]*?)<\/link>/)?.?.trim() || "";
+    const pubDate = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.?.trim() || "";
+    const rawDesc = itemXml.match(/<description>([\s\S]*?)<\/description>/)?. || "";
+    const rawSource = itemXml.match(/<source[^>]*>([\s\S]*?)<\/source>/)?. || "";
 
     const cleanTitle = decodeXmlEntities(rawTitle).replace(/\s-\s[^-]+$/, "").trim();
     const sourceName = decodeXmlEntities(rawSource);
@@ -77,8 +99,8 @@ function parseGoogleNewsRss(xml: string): RssItem[] {
 function buildGoogleNewsUrl(query: string) {
   const url = new URL("https://news.google.com");
   url.pathname = "/rss/search";
-  // Excluimos términos de TV/espectáculos directamente en Google News
-  const cleanQuery = `${query} -farandula -teleserie -reality -espectaculos when:1d`;
+  // Excluimos TV, farándula y notas de "dónde ver / a qué hora" directamente en Google News
+  const cleanQuery = `${query} -farandula -teleserie -reality -espectaculos -"donde ver" -"a que hora" -pronostico when:1d`;
   url.searchParams.set("q", cleanQuery);
   url.searchParams.set("hl", "es-419");
   url.searchParams.set("gl", "CL");
@@ -88,25 +110,25 @@ function buildGoogleNewsUrl(query: string) {
 
 const RSS_FEEDS = [
   {
-    name: "Legión Chilena Fútbol",
+    name: "Legión Chilena y Fútbol Nacional",
     url: buildGoogleNewsUrl(
-      '("Alexis Sánchez" OR "Ben Brereton" OR "Darío Osorio" OR "Guillermo Maripán" OR "Gabriel Suazo" OR "Erick Pulgar" OR "Paulo Díaz" OR "Marcelino Núñez" OR "Felipe Loyola" OR "Selección Chilena" OR "La Roja" fútbol)'
+      '("Alexis Sánchez" OR "Ben Brereton" OR "Darío Osorio" OR "Guillermo Maripán" OR "Gabriel Suazo" OR "Erick Pulgar" OR "Paulo Díaz" OR "Marcelino Núñez" OR "Felipe Loyola" OR "Selección Chilena" OR "La Roja" OR "Colo-Colo" OR "Universidad de Chile" OR "Universidad Católica")'
     ),
     sport: "football",
     defaultSection: "chilenos",
   },
   {
-    name: "Tenis Chileno y Circuito",
+    name: "Élite Tenis Mundial y Chilenos",
     url: buildGoogleNewsUrl(
-      '("Alejandro Tabilo" OR "Nicolás Jarry" OR "Cristian Garin" OR "Tomás Barrios" OR "tenis" OR "Grand Slam" OR "Masters 1000")'
+      '("Alejandro Tabilo" OR "Nicolás Jarry" OR "Cristian Garin" OR "Tomás Barrios" OR "Carlos Alcaraz" OR "Jannik Sinner" OR "Alexander Zverev" OR "Novak Djokovic" OR "Aryna Sabalenka" OR "Elena Rybakina" OR "Iga Swiatek" OR "Coco Gauff")'
     ),
     sport: "tennis",
     defaultSection: "chilenos",
   },
   {
-    name: "Superestrellas y Torneos",
+    name: "Superestrellas y Grandes Torneos",
     url: buildGoogleNewsUrl(
-      '("Real Madrid" OR "FC Barcelona" OR "Lamine Yamal" OR "Kylian Mbappé" OR "Vinicius" OR "Champions League" OR "Premier League")'
+      '("Real Madrid" OR "FC Barcelona" OR "Lamine Yamal" OR "Kylian Mbappé" OR "Vinicius" OR "Erling Haaland" OR "Lionel Messi" OR "Cristiano Ronaldo" OR "Champions League" OR "Copa Libertadores")'
     ),
     sport: "football",
     defaultSection: "superestrellas",
@@ -155,7 +177,6 @@ export async function GET(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // Rotar feeds según la hora para cubrir fútbol chileno, tenis y superestrellas
   const offset = new Date().getUTCHours() % RSS_FEEDS.length;
   const rotatedFeeds = [
     ...RSS_FEEDS.slice(offset),
@@ -168,11 +189,11 @@ export async function GET(request: Request) {
   const MAX_AI_ATTEMPTS = 2;
   const publishedTitles: string[] = [];
   const errors: string[] = [];
-  const MAX_AGE_MS = 8 * 60 * 60 * 1000; // Últimas 8 horas para priorizar primicias
+  const MAX_AGE_MS = 8 * 60 * 60 * 1000;
   const now = Date.now();
 
   for (const feed of rotatedFeeds) {
-    if (createdCount >= 1) {
+    if (createdCount >= 1 || aiAttempts >= MAX_AI_ATTEMPTS) {
       break;
     }
 
@@ -205,9 +226,9 @@ export async function GET(request: Request) {
         });
 
       for (const item of recentItems.slice(0, 10)) {
-        if (createdCount >= 1) break;
+        if (createdCount >= 1 || aiAttempts >= MAX_AI_ATTEMPTS) break;
 
-        if (!isSportsNews(item)) continue;
+        if (!isValidFeaturedNews(item)) continue;
 
         scannedCount++;
 
@@ -235,15 +256,19 @@ export async function GET(request: Request) {
         }
 
         const prompt = `
-        Eres un editor deportivo chileno moderno para el portal "Pasión Deportiva" (exclusivo de FÚTBOL y TENIS).
-        Analiza el siguiente despacho informativo. Si la noticia trata sobre farándula, televisión, teleseries, vida privada/amorosa o cualquier tema ajeno al deporte competitivo (fútbol o tenis), responde ÚNICAMENTE: {"reject": true}
+        Eres el editor jefe del portal deportivo chileno "Pasión Deportiva" (exclusivo de FÚTBOL y TENIS de alto impacto).
+        Evalúa el despacho informativo y recházalo respondiendo ÚNICAMENTE {"reject": true} si cumple CUALQUIERA de estas condiciones:
+        - Trata de farándula, TV, teleseries o vida privada/amorosa.
+        - Es una nota de guía de televisión, horarios o "dónde ver el partido" (ej. "Dónde ver...", "A qué hora juega...", "Qué canal transmite...").
+        - Es una noticia menor, relleno, rumor sin sustancia o no aporta un hecho noticioso concreto (resultado relevante, gol/actuación destacada, lesión oficial, fichaje, clasificación o declaración importante).
 
-        Si SÍ es una noticia deportiva real de fútbol o tenis, redacta una nota periodística breve, objetiva y 100% original en español de Chile basándote ÚNICAMENTE en los hechos del despacho.
+        Si SÍ es una noticia deportiva destacada con hechos concretos, redacta una nota periodística completa, atractiva y 100% original en español de Chile basándote ÚNICAMENTE en los datos del despacho.
 
         Reglas editoriales estrictas:
-        1. NO copies frases literales del titular o resumen original; reescribe todo con voz propia.
-        2. NO inventes marcadores, lesiones, fechas ni declaraciones que no aparezcan en el texto base.
-        3. Si el medio de origen (${item.sourceName || "prensa deportiva"}) aporta un dato o reporte específico, cítalo de forma natural (ej. "según informó ${item.sourceName}").
+        1. NUNCA uses titulares tipo "Dónde ver..." ni preguntas clickbait. El titular debe ir directo al hecho noticioso.
+        2. NO copies frases literales del texto original; reescribe todo con estilo periodístico ágil.
+        3. NO inventes marcadores, lesiones, canales de TV ni declaraciones que no estén en el contexto.
+        4. Cita de forma natural al medio de origen (${item.sourceName || "prensa deportiva"}) si aporta el reporte.
 
         Titular de referencia: ${item.title}
         Contexto disponible: ${item.description}
@@ -253,17 +278,15 @@ export async function GET(request: Request) {
         Responde ÚNICAMENTE con un objeto JSON válido con esta estructura exacta:
         {
           "reject": false,
-          "title": "Titular atractivo, claro y sin humo en español de Chile (máximo 85 caracteres)",
+          "title": "Titular directo, informativo y atractivo en español de Chile (máximo 85 caracteres)",
           "section": "${feed.defaultSection}",
-          "content": "Cuerpo de la noticia en 3 párrafos cortos, claros y directos en español de Chile."
+          "content": "Desarrollo completo de la noticia en 3 párrafos claros y bien redactados en español de Chile (mínimo 90 palabras en total)."
         }
         Nota: En "section" usa solo uno de estos tres valores exactos: "chilenos", "superestrellas" o "torneos".
       `;
 
-        if (aiAttempts >= MAX_AI_ATTEMPTS) break;
         aiAttempts++;
 
-        // Try/catch individual por artículo: si falla uno, continúa con el siguiente del mismo feed
         try {
           const responseText = await generateSafeContent(
             prompt,
@@ -360,3 +383,5 @@ export async function GET(request: Request) {
     errors: errors.length > 0 ? errors : undefined,
   });
 }
+
+
