@@ -176,6 +176,33 @@ export default function TodayMatchesWidget({
   const [now, setNow] = useState<number>(0);
 
   const sliderRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartX = useRef(0);
+  const dragScrollLeft = useRef(0);
+  const hasDragged = useRef(false);
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!sliderRef.current) return;
+    setIsDragging(true);
+    hasDragged.current = false;
+    dragStartX.current = e.pageX - sliderRef.current.offsetLeft;
+    dragScrollLeft.current = sliderRef.current.scrollLeft;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || !sliderRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - sliderRef.current.offsetLeft;
+    const walk = (x - dragStartX.current) * 1.5; // Ajusta 1.5 para más o menos sensibilidad
+    if (Math.abs(walk) > 5) {
+      hasDragged.current = true;
+    }
+    sliderRef.current.scrollLeft = dragScrollLeft.current - walk;
+  };
+
+  const stopDragging = () => {
+    setIsDragging(false);
+  };
 
   const scrollSlider = (direction: "left" | "right") => {
     if (!sliderRef.current) return;
@@ -487,7 +514,20 @@ export default function TodayMatchesWidget({
       {/* 2. Slider horizontal de tarjetas compactas */}
       <div
         ref={sliderRef}
-        className="flex divide-x divide-slate-100 overflow-x-auto scrollbar-none"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={stopDragging}
+        onMouseLeave={stopDragging}
+        onDragStart={(e) => e.preventDefault()}
+        onClickCapture={(e) => {
+          if (hasDragged.current) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+        className={`flex divide-x divide-slate-100 overflow-x-auto scrollbar-none select-none ${
+          isDragging ? "cursor-grabbing" : "cursor-grab"
+        }`}
       >
         {loading ? (
           Array.from({ length: 6 }).map((_, i) => (
