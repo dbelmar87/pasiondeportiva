@@ -14,9 +14,10 @@ export interface AvatarOption {
     | "solid"
     | "crown"
     | "football-ball"
-    | "tennis-ball"
-    | "tennis-racket";
-  imageUrl?: string;
+    | "tennis-ball";
+  diceStyle?: "avataaars" | "notionists" | "open-peeps" | "bottts";
+  diceSeed?: string;
+  diceBg?: string;
 }
 
 export const FAN_AVATARS: AvatarOption[] = [
@@ -39,20 +40,20 @@ export const FAN_AVATARS: AvatarOption[] = [
   { id: "sport-tenis", label: "Tenis Pro", category: "escudos", primaryColor: "#bef264", secondaryColor: "#3f6212", design: "tennis-ball" },
 
   // 2. Deportistas / Estilo Pro
-  { id: "dep-goleador", label: "El 9 Goleador", category: "deportistas", imageUrl: "https://dicebear.com" },
-  { id: "dep-arquero", label: "Muralla", category: "deportistas", imageUrl: "https://dicebear.com" },
-  { id: "dep-tenista", label: "Ace en Arcilla", category: "deportistas", imageUrl: "https://dicebear.com" },
-  { id: "dep-capitan", label: "Capitán", category: "deportistas", imageUrl: "https://dicebear.com" },
-  { id: "dep-dt", label: "Estratega DT", category: "deportistas", imageUrl: "https://dicebear.com" },
-  { id: "dep-raqueta", label: "Saque y Red", category: "deportistas", imageUrl: "https://dicebear.com" },
+  { id: "dep-goleador", label: "El 9 Goleador", category: "deportistas", diceStyle: "avataaars", diceSeed: "Goleador9", diceBg: "b6e3f4" },
+  { id: "dep-arquero", label: "Muralla", category: "deportistas", diceStyle: "avataaars", diceSeed: "MurallaGK", diceBg: "c0aede" },
+  { id: "dep-tenista", label: "Ace en Arcilla", category: "deportistas", diceStyle: "avataaars", diceSeed: "AceArcilla", diceBg: "ffd5dc" },
+  { id: "dep-capitan", label: "Capitán", category: "deportistas", diceStyle: "avataaars", diceSeed: "CapitanCL", diceBg: "d1d4f9" },
+  { id: "dep-dt", label: "Estratega DT", category: "deportistas", diceStyle: "notionists", diceSeed: "EstrategaDT", diceBg: "ffdfbf" },
+  { id: "dep-raqueta", label: "Saque y Red", category: "deportistas", diceStyle: "notionists", diceSeed: "SaqueRed", diceBg: "c0aede" },
 
   // 3. Personajes Animados / Caricaturas
-  { id: "char-hero", label: "Súper Hincha", category: "personajes", imageUrl: "https://dicebear.com" },
-  { id: "char-robot", label: "VarBot 3000", category: "personajes", imageUrl: "https://dicebear.com" },
-  { id: "char-ninja", label: "Crack Ninja", category: "personajes", imageUrl: "https://dicebear.com" },
-  { id: "char-toon", label: "Animado 10", category: "personajes", imageUrl: "https://dicebear.com" },
-  { id: "char-cyber", label: "Cyber Gol", category: "personajes", imageUrl: "https://dicebear.com" },
-  { id: "char-legend", label: "Leyenda Toon", category: "personajes", imageUrl: "https://dicebear.com" },
+  { id: "char-hero", label: "Súper Hincha", category: "personajes", diceStyle: "open-peeps", diceSeed: "SuperHincha", diceBg: "b6e3f4" },
+  { id: "char-robot", label: "VarBot 3000", category: "personajes", diceStyle: "bottts", diceSeed: "VarBot3000", diceBg: "0f172a" },
+  { id: "char-ninja", label: "Crack Ninja", category: "personajes", diceStyle: "open-peeps", diceSeed: "CrackNinja", diceBg: "ffd5dc" },
+  { id: "char-toon", label: "Animado 10", category: "personajes", diceStyle: "open-peeps", diceSeed: "Animado10", diceBg: "d1d4f9" },
+  { id: "char-cyber", label: "Cyber Gol", category: "personajes", diceStyle: "bottts", diceSeed: "CyberGol", diceBg: "1e293b" },
+  { id: "char-legend", label: "Leyenda Toon", category: "personajes", diceStyle: "bottts", diceSeed: "LeyendaToon", diceBg: "064e3b" },
 ];
 
 function CustomSportSvg({ avatar }: { avatar: AvatarOption }) {
@@ -144,13 +145,16 @@ export function FanAvatar({
     lg: "h-24 w-24",
   }[size];
 
-  if (avatar.imageUrl) {
+  if (avatar.diceStyle && avatar.diceSeed) {
+    const apiHost = ["api", "dicebear", "com"].join(".");
+    const avatarSrc = `https://${apiHost}/9.x/${avatar.diceStyle}/svg?seed=${avatar.diceSeed}&backgroundColor=${avatar.diceBg || "b6e3f4"}`;
+
     return (
       <div
         className={`${sizeClasses} shrink-0 overflow-hidden rounded-2xl border-2 border-white bg-slate-100 shadow-sm`}
       >
         <img
-          src={avatar.imageUrl}
+          src={avatarSrc}
           alt={nickname}
           loading="lazy"
           className="h-full w-full object-cover"
