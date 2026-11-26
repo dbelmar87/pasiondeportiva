@@ -28,19 +28,45 @@ const ESPN_LEAGUES = [
   { slug: "arg.1", id: 128, name: "Liga Profesional Argentina", country: "Argentina", isImportant: false, filterBigClubs: true },
 ];
 
-// Clubes grandes + equipos con chilenos en el extranjero + superestrellas
+
+// Todos los clubes de las 5 Grandes Ligas (Premier, LaLiga, Serie A, Bundesliga, Ligue 1) + Chilenos
 const FEATURED_AND_CHILEAN_CLUBS = [
+  // Clubes estrella globales
   "al-nassr", "al nassr", "inter miami",
-  "real madrid", "barcelona", "atletico", "athletic", "betis", "sevilla", "villarreal", "real sociedad",
-  "manchester", "liverpool", "arsenal", "chelsea", "tottenham", "aston villa", "newcastle", "norwich",
-  "bayern", "dortmund", "leverkusen", "leipzig",
-  "inter", "milan", "juventus", "roma", "lazio", "napoli", "atalanta", "udinese", "torino", "bologna", "parma",
-  "psg", "paris", "monaco", "marseille", "lyon", "toulouse",
-  "porto", "benfica", "sporting", "ajax", "psv", "feyenoord",
-  "midtjylland", "galatasaray", "fenerbahce",
-  "colo", "universidad", "catolica", "boca", "river", "racing", "independiente", "flamengo", "palmeiras",
-  "chile"
+
+  // Premier League (Inglaterra)
+  "arsenal", "aston villa", "bournemouth", "brentford", "brighton", "chelsea",
+  "crystal palace", "everton", "fulham", "ipswich", "leicester", "liverpool",
+  "manchester city", "man city", "manchester united", "man utd", "newcastle",
+  "nottingham", "southampton", "tottenham", "west ham", "wolves", "wolverhampton",
+  "norwich", "sheffield", "watford", "blackburn",
+
+  // LaLiga (España)
+  "real madrid", "barcelona", "atletico", "athletic", "real sociedad", "betis",
+  "villarreal", "sevilla", "valencia", "girona", "celta", "osasuna", "mallorca",
+  "rayo vallecano", "getafe", "alaves", "espanyol", "las palmas", "leganes", "valladolid",
+
+  // Serie A (Italia)
+  "inter", "milan", "juventus", "napoli", "atalanta", "roma", "lazio",
+  "fiorentina", "bologna", "torino", "udinese", "genoa", "monza", "verona",
+  "lecce", "cagliari", "parma", "como", "empoli", "venezia",
+
+  // Bundesliga (Alemania)
+  "bayern", "leverkusen", "dortmund", "leipzig", "stuttgart", "frankfurt",
+  "freiburg", "hoffenheim", "heidenheim", "werder", "bremen", "wolfsburg",
+  "augsburg", "mainz", "gladbach", "monchengladbach", "union berlin", "bochum", "st. pauli",
+
+  // Ligue 1 (Francia)
+  "psg", "paris", "monaco", "brest", "lille", "nice", "lyon", "lens",
+  "marseille", "reims", "rennes", "toulouse", "strasbourg", "montpellier",
+  "nantes", "auxerre", "angers", "le havre", "saint-etienne",
+
+  // Otros equipos europeos con chilenos + grandes de Portugal/Países Bajos/Sudamérica
+  "midtjylland", "porto", "benfica", "sporting", "ajax", "psv", "feyenoord",
+  "galatasaray", "fenerbahce", "colo", "universidad", "catolica",
+  "boca", "river", "racing", "independiente", "flamengo", "palmeiras", "chile"
 ];
+
 
 function getTodaySantiago(): string {
   return new Intl.DateTimeFormat("en-CA", {
