@@ -24,22 +24,42 @@ export interface TeamStanding {
   ];
   
   export async function fetchEspnStandings(slug: string): Promise<TeamStanding[]> {
-    const url = `https://espn.com{slug}/standings`;
+    const endpoints = [
+      `https://espn.com{slug}/standings`,
+      `https://espn.com{slug}/standings`,
+    ];
   
-    const res = await fetch(url, {
-      cache: "no-store",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        Accept: "application/json",
-      },
-    });
+    let data: any = null;
+    let lastError = "";
   
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status} al consultar ESPN para ${slug}`);
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          cache: "no-store",
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            Accept: "application/json, text/plain, */*",
+            Referer: "https://www.espn.com/",
+          },
+        });
+  
+        if (!res.ok) {
+          lastError = `HTTP ${res.status} en ${url}`;
+          continue;
+        }
+  
+        data = await res.json();
+        break;
+      } catch (err: any) {
+        const causeMsg = err?.cause?.code || err?.cause?.message || "";
+        lastError = `${err.message} ${causeMsg ? `(${causeMsg})` : ""}`.trim();
+      }
     }
   
-    const data = await res.json();
+    if (!data) {
+      throw new Error(lastError || `No se pudo obtener standings para ${slug}`);
+    }
   
     let targetGroup = data.children?.[0];
   
