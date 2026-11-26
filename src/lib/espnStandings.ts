@@ -18,7 +18,10 @@ export interface TeamStanding {
     { slug: "esp.1", label: "LaLiga", flag: "🇪🇸" },
     { slug: "ita.1", label: "Serie A", flag: "🇮🇹" },
     { slug: "ger.1", label: "Bundesliga", flag: "🇩🇪" },
+    { slug: "fra.1", label: "Ligue 1", flag: "🇫🇷" },
     { slug: "uefa.champions", label: "Champions", flag: "🏆" },
+    { slug: "uefa.europa", label: "Europa League", flag: "🟠" },
+    { slug: "uefa.europa.conf", label: "Conference", flag: "🟢" },
     { slug: "ksa.1", label: "Saudí", flag: "🇸🇦" },
     { slug: "usa.1", label: "MLS (Este)", flag: "🇺🇸" },
   ];

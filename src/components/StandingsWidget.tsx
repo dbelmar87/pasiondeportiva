@@ -123,8 +123,8 @@ export default function StandingsWidget() {
             {visibleTeams.map((team) => {
               const isTop = team.rank <= 4;
               const isBottom =
-                currentLeague.slug !== "uefa.champions" &&
-                team.rank >= currentLeague.teams.length - 1;
+              !["uefa.champions", "uefa.europa", "uefa.europa.conf"].includes(currentLeague.slug) &&
+              team.rank >= currentLeague.teams.length - 1;
 
               return (
                 <tr
