@@ -2,26 +2,43 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const ESPN_LEAGUES = [
-  { slug: "chi.1", id: 265, name: "Primera División de Chile", country: "Chile", isImportant: true },
-  { slug: "chi.copa_chi", id: 267, name: "Copa Chile", country: "Chile", isImportant: true },
-  { slug: "conmebol.libertadores", id: 13, name: "CONMEBOL Libertadores", country: "Sudamérica", isImportant: true },
-  { slug: "conmebol.sudamericana", id: 11, name: "CONMEBOL Sudamericana", country: "Sudamérica", isImportant: true },
-  { slug: "fifa.worldq.conmebol", id: 34, name: "Eliminatorias Sudamericanas", country: "Sudamérica", isImportant: true },
-  { slug: "fifa.friendly", id: 10, name: "Amistosos Internacionales", country: "Mundo", isImportant: true },
-  { slug: "conmebol.america", id: 9, name: "Copa América", country: "Sudamérica", isImportant: true },
-  { slug: "fifa.world", id: 1, name: "Mundial", country: "Mundo", isImportant: true },
-  { slug: "uefa.champions", id: 2, name: "UEFA Champions League", country: "Europa", isImportant: true },
-  { slug: "uefa.europa", id: 3, name: "UEFA Europa League", country: "Europa", isImportant: true },
-  { slug: "eng.1", id: 39, name: "Premier League", country: "Inglaterra", isImportant: true },
-  { slug: "esp.1", id: 140, name: "La Liga", country: "España", isImportant: true },
-  { slug: "ita.1", id: 135, name: "Serie A", country: "Italia", isImportant: true },
-  { slug: "ger.1", id: 78, name: "Bundesliga", country: "Alemania", isImportant: true },
-  { slug: "ksa.1", id: 307, name: "Saudi Pro League", country: "Arabia Saudita", isImportant: false },
-  { slug: "usa.1", id: 253, name: "MLS", country: "Estados Unidos", isImportant: false },
-  { slug: "arg.1", id: 128, name: "Liga Profesional Argentina", country: "Argentina", isImportant: false },
+  // Torneos donde entran TODOS los partidos del día
+  { slug: "chi.1", id: 265, name: "Primera División de Chile", country: "Chile", isImportant: true, filterBigClubs: false },
+  { slug: "chi.copa_chi", id: 267, name: "Copa Chile", country: "Chile", isImportant: true, filterBigClubs: false },
+  { slug: "conmebol.libertadores", id: 13, name: "CONMEBOL Libertadores", country: "Sudamérica", isImportant: true, filterBigClubs: false },
+  { slug: "conmebol.sudamericana", id: 11, name: "CONMEBOL Sudamericana", country: "Sudamérica", isImportant: true, filterBigClubs: false },
+  { slug: "fifa.worldq.conmebol", id: 34, name: "Eliminatorias Sudamericanas", country: "Sudamérica", isImportant: true, filterBigClubs: false },
+  { slug: "fifa.friendly", id: 10, name: "Amistosos Internacionales", country: "Mundo", isImportant: true, filterBigClubs: false },
+  { slug: "conmebol.america", id: 9, name: "Copa América", country: "Sudamérica", isImportant: true, filterBigClubs: false },
+  { slug: "fifa.world", id: 1, name: "Mundial", country: "Mundo", isImportant: true, filterBigClubs: false },
+  { slug: "uefa.champions", id: 2, name: "UEFA Champions League", country: "Europa", isImportant: true, filterBigClubs: false },
+
+  // Torneos europeos con muchos partidos simultáneos: filtramos clubes grandes + chilenos
+  { slug: "uefa.europa", id: 3, name: "UEFA Europa League", country: "Europa", isImportant: true, filterBigClubs: true },
+  { slug: "eng.1", id: 39, name: "Premier League", country: "Inglaterra", isImportant: true, filterBigClubs: true },
+  { slug: "esp.1", id: 140, name: "La Liga", country: "España", isImportant: true, filterBigClubs: true },
+  { slug: "ita.1", id: 135, name: "Serie A", country: "Italia", isImportant: true, filterBigClubs: true },
+  { slug: "ger.1", id: 78, name: "Bundesliga", country: "Alemania", isImportant: true, filterBigClubs: true },
+
+  // Ligas secundarias: solo clubes destacados (Al-Nassr, Inter Miami) o favoritos de usuarios
+  { slug: "ksa.1", id: 307, name: "Saudi Pro League", country: "Arabia Saudita", isImportant: false, filterBigClubs: true },
+  { slug: "usa.1", id: 253, name: "MLS", country: "Estados Unidos", isImportant: false, filterBigClubs: true },
+  { slug: "arg.1", id: 128, name: "Liga Profesional Argentina", country: "Argentina", isImportant: false, filterBigClubs: true },
 ];
 
-const FEATURED_CLUBS = ["al-nassr", "al nassr", "inter miami"];
+// Clubes grandes + equipos con chilenos en el extranjero + superestrellas
+const FEATURED_AND_CHILEAN_CLUBS = [
+  "al-nassr", "al nassr", "inter miami",
+  "real madrid", "barcelona", "atletico", "athletic", "betis", "sevilla", "villarreal", "real sociedad",
+  "manchester", "liverpool", "arsenal", "chelsea", "tottenham", "aston villa", "newcastle", "norwich",
+  "bayern", "dortmund", "leverkusen", "leipzig",
+  "inter", "milan", "juventus", "roma", "lazio", "napoli", "atalanta", "udinese", "torino", "bologna", "parma",
+  "psg", "paris", "monaco", "marseille", "lyon", "toulouse",
+  "porto", "benfica", "sporting", "ajax", "psv", "feyenoord",
+  "midtjylland", "galatasaray", "fenerbahce",
+  "colo", "universidad", "catolica", "boca", "river", "racing", "independiente", "flamengo", "palmeiras",
+  "chile"
+];
 
 function getTodaySantiago(): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -81,24 +98,31 @@ export async function GET(request: NextRequest) {
 
     const needsDailySync = mode === "daily" || !todayCount || todayCount === 0;
 
-    // Freno inteligente: solo actualiza en vivo si hay partidos en la ventana de cierre (100 a 165 min)
-    const minFinishedTime = new Date(Date.now() - 100 * 60 * 1000).toISOString();
-    const maxWindowTime = new Date(Date.now() - 165 * 60 * 1000).toISOString();
+    // Ventana en vivo: desde 5 min antes del inicio hasta 180 min después
+    const upcomingLimit = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    const maxElapsedLimit = new Date(Date.now() - 180 * 60 * 1000).toISOString();
 
-    const { data: pendingMatches } = await supabase
+    const { data: activeMatches } = await supabase
       .from("matches")
-      .select("id")
-      .gte("match_date", maxWindowTime)
-      .lte("match_date", minFinishedTime)
+      .select("id, league_id")
+      .gte("match_date", maxElapsedLimit)
+      .lte("match_date", upcomingLimit)
       .not("status_short", "in", '("FT","AET","PEN","PST","CANC","SUSP","INT","ABD")');
 
-    if (!needsDailySync && (!pendingMatches || pendingMatches.length === 0)) {
+    if (!needsDailySync && (!activeMatches || activeMatches.length === 0)) {
       return NextResponse.json({
         ok: true,
         apiCallsUsed: 0,
-        message: "Sin partidos pendientes de cierre. Cero consultas realizadas.",
+        message: "Sin partidos en curso en este minuto. Cero consultas realizadas.",
       });
     }
+
+    const activeLeagueIds = new Set(
+      (activeMatches || []).map((m) => m.league_id)
+    );
+    const leaguesToFetch = needsDailySync
+      ? ESPN_LEAGUES
+      : ESPN_LEAGUES.filter((l) => activeLeagueIds.has(l.id));
 
     const { data: fans } = await supabase
       .from("fan_profiles")
@@ -113,7 +137,6 @@ export async function GET(request: NextRequest) {
       });
     });
 
-    // Fecha única YYYYMMDD requerida por ESPN
     const espnDate = todayStr.replace(/-/g, "");
     const espnHost = ["site", "api", "espn", "com"].join(".");
     const nowIso = new Date().toISOString();
@@ -121,7 +144,7 @@ export async function GET(request: NextRequest) {
     let totalFetched = 0;
 
     await Promise.all(
-      ESPN_LEAGUES.map(async (league) => {
+      leaguesToFetch.map(async (league) => {
         try {
           const url = `https://${espnHost}/apis/site/v2/sports/soccer/${league.slug}/scoreboard?dates=${espnDate}`;
           const res = await fetch(url, {
@@ -158,14 +181,15 @@ export async function GET(request: NextRequest) {
             const homeLower = homeName.toLowerCase();
             const awayLower = awayName.toLowerCase();
 
-            const isFeaturedClub = FEATURED_CLUBS.some(
+            const isFeaturedClub = FEATURED_AND_CHILEAN_CLUBS.some(
               (club) => homeLower.includes(club) || awayLower.includes(club)
             );
             const isFollowedClub = Array.from(followedTeams).some(
               (fav) => homeLower.includes(fav) || awayLower.includes(fav)
             );
 
-            if (!league.isImportant && !isFeaturedClub && !isFollowedClub) {
+            // Si la liga requiere filtro de clubes (ej. Europa League) o es secundaria, solo guardamos partidos destacados/seguidos
+            if (league.filterBigClubs && !isFeaturedClub && !isFollowedClub) {
               continue;
             }
 
@@ -237,6 +261,7 @@ export async function GET(request: NextRequest) {
       provider: "ESPN",
       mode: needsDailySync ? "daily" : "live",
       date: todayStr,
+      leaguesChecked: leaguesToFetch.length,
       totalFetched,
       savedMatches: rowsToUpsert.length,
     });
@@ -245,3 +270,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+

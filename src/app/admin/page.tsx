@@ -26,7 +26,7 @@ export default function AdminPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/admin/comments", {
+      const res = await fetch("/api/comments", {
         headers: { "x-admin-password": passToUse },
       });
       const json = await res.json();
@@ -45,7 +45,7 @@ export default function AdminPage() {
   }
 
   async function handleAction(id: string, action: "approve" | "delete") {
-    const res = await fetch("/api/admin/comments", {
+    const res = await fetch("/api/comments", {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
