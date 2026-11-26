@@ -1,21 +1,26 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { fetchEspnStandings, TRACKED_LEAGUES } from '@/lib/espnStandings';
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { fetchEspnStandings, TRACKED_LEAGUES } from "@/lib/espnStandings";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+export async function GET(request: NextRequest) {
+  const authHeader = request.headers.get("authorization")?.trim();
+  const secretParam = request.nextUrl.searchParams.get("secret")?.trim();
+  const cronSecret = process.env.CRON_SECRET?.trim();
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const secret = searchParams.get('secret');
-  const singleSlug = searchParams.get('league'); // Opcional: actualizar solo 1 liga
-
-  if (secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+  if (
+    cronSecret &&
+    authHeader !== `Bearer ${cronSecret}` &&
+    secretParam !== cronSecret
+  ) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const singleSlug = request.nextUrl.searchParams.get("league");
   const leaguesToUpdate = singleSlug
     ? TRACKED_LEAGUES.filter((l) => l.slug === singleSlug)
     : TRACKED_LEAGUES;
@@ -27,7 +32,7 @@ export async function GET(req: NextRequest) {
       const teams = await fetchEspnStandings(league.slug);
 
       if (teams.length > 0) {
-        const { error } = await supabase.from('league_standings').upsert(
+        const { error } = await supabase.from("league_standings").upsert(
           {
             slug: league.slug,
             label: league.label,
@@ -35,14 +40,14 @@ export async function GET(req: NextRequest) {
             teams,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: 'slug' }
+          { onConflict: "slug" }
         );
 
-        if (error) throw error;
-        results.push({ slug: league.slug, status: 'ok', count: teams.length });
+        if (error) throw new Error(error.message);
+        results.push({ slug: league.slug, status: "ok", count: teams.length });
       }
     } catch (err: any) {
-      results.push({ slug: league.slug, status: 'error', message: err.message });
+      results.push({ slug: league.slug, status: "error", message: err.message });
     }
   }
 

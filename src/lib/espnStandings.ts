@@ -24,9 +24,12 @@ export interface TeamStanding {
   ];
   
   export async function fetchEspnStandings(slug: string): Promise<TeamStanding[]> {
+    const hostMain = ["site", "api", "espn", "com"].join(".");
+    const hostWeb = ["site", "web", "api", "espn", "com"].join(".");
+  
     const endpoints = [
-      `https://espn.com{slug}/standings`,
-      `https://espn.com{slug}/standings`,
+      `https://${hostMain}/apis/v2/sports/soccer/${slug}/standings`,
+      `https://${hostWeb}/apis/v2/sports/soccer/${slug}/standings`,
     ];
   
     let data: any = null;
@@ -37,23 +40,22 @@ export interface TeamStanding {
         const res = await fetch(url, {
           cache: "no-store",
           headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-            Accept: "application/json, text/plain, */*",
-            Referer: "https://www.espn.com/",
+            "User-Agent": "Mozilla/5.0 (compatible; PasionDeportiva/1.0)",
+            Accept: "application/json",
           },
         });
   
         if (!res.ok) {
-          lastError = `HTTP ${res.status} en ${url}`;
+          lastError = `HTTP ${res.status}`;
           continue;
         }
   
         data = await res.json();
         break;
       } catch (err: any) {
-        const causeMsg = err?.cause?.code || err?.cause?.message || "";
-        lastError = `${err.message} ${causeMsg ? `(${causeMsg})` : ""}`.trim();
+        const host = err?.cause?.hostname || "";
+        const code = err?.cause?.code || "";
+        lastError = `${err.message} (${code} ${host})`.trim();
       }
     }
   
