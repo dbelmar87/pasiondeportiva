@@ -42,7 +42,9 @@ const BLOCKED_KEYWORDS = [
   // Guías de TV, horarios y previas clickbait sin noticia real
   "donde ver", "a que hora", "que canal transmite", "transmision en vivo",
   "ver en vivo", "ver online", "minuto a minuto", "posible formacion",
-  "probable formacion", "pronostico", "apuestas", "cuotas"
+  "probable formacion", "pronostico", "apuestas", "cuotas",
+  "todos los goles", "resumen de la fecha", "resumen de la jornada", 
+  "asi quedo la tabla", "resultados de la fecha", "resultados de la jornada", "compacto"
 ];
 
 function isValidFeaturedNews(item: RssItem): boolean {
@@ -60,7 +62,7 @@ function isValidFeaturedNews(item: RssItem): boolean {
   }
 
   // 3. Exigir un mínimo de contexto en la descripción para que la IA no escriba notas vacías
-  if (item.description.trim().length < 45) {
+  if (item.description.trim().length < 85) {
     return false;
   }
 
@@ -256,19 +258,20 @@ export async function GET(request: Request) {
         }
 
         const prompt = `
-        Eres el editor jefe del portal deportivo chileno "Pasión Deportiva" (exclusivo de FÚTBOL y TENIS de alto impacto).
+         Eres el editor jefe del portal deportivo chileno "Pasión Deportiva" (100% SIN HUMO, exclusivo de FÚTBOL y TENIS).
         Evalúa el despacho informativo y recházalo respondiendo ÚNICAMENTE {"reject": true} si cumple CUALQUIERA de estas condiciones:
         - Trata de farándula, TV, teleseries o vida privada/amorosa.
-        - Es una nota de guía de televisión, horarios o "dónde ver el partido" (ej. "Dónde ver...", "A qué hora juega...", "Qué canal transmite...").
-        - Es una noticia menor, relleno, rumor sin sustancia o no aporta un hecho noticioso concreto (resultado relevante, gol/actuación destacada, lesión oficial, fichaje, clasificación o declaración importante).
+        - Es una guía de TV, horarios o "dónde ver el partido".
+        - Es un compilado o resumen genérico (ej. "Todos los goles de la fecha", "Resultados de la jornada", "Así quedó la tabla") donde el contexto disponible NO incluye los marcadores exactos ni los nombres de los equipos/jugadores protagonistas.
+        - El texto base tiene tan poca información que te obligaría a rellenar con frases generales o lugares comunes sin datos duros.
 
-        Si SÍ es una noticia deportiva destacada con hechos concretos, redacta una nota periodística completa, atractiva y 100% original en español de Chile basándote ÚNICAMENTE en los datos del despacho.
+        Si SÍ tiene datos concretos (nombres propios, resultado exacto, lesión, fichaje o declaración específica), redacta una nota periodística directa y 100% original en español de Chile basándote ÚNICAMENTE en los hechos entregados.
 
         Reglas editoriales estrictas:
-        1. NUNCA uses titulares tipo "Dónde ver..." ni preguntas clickbait. El titular debe ir directo al hecho noticioso.
-        2. NO copies frases literales del texto original; reescribe todo con estilo periodístico ágil.
-        3. NO inventes marcadores, lesiones, canales de TV ni declaraciones que no estén en el contexto.
-        4. Cita de forma natural al medio de origen (${item.sourceName || "prensa deportiva"}) si aporta el reporte.
+        1. PROHIBIDO el relleno genérico (frases como "alta intensidad ofensiva", "mantuvo a los hinchas al borde del asiento" o "promete mantenerse al rojo vivo"). Cada oración debe aportar un dato concreto del despacho.
+        2. Si el texto habla de un resultado o partido, incluye obligatoriamente los equipos y el marcador que aparecen en el contexto; si no aparecen en el contexto, rechaza la nota con {"reject": true}.
+        3. NO copies frases literales ni inventes datos que no estén en el texto base.
+        4. Si los hechos alcanzan solo para 2 párrafos concretos, escribe 2 párrafos contundentes en lugar de inventar un tercero de relleno.
 
         Titular de referencia: ${item.title}
         Contexto disponible: ${item.description}
@@ -278,9 +281,9 @@ export async function GET(request: Request) {
         Responde ÚNICAMENTE con un objeto JSON válido con esta estructura exacta:
         {
           "reject": false,
-          "title": "Titular directo, informativo y atractivo en español de Chile (máximo 85 caracteres)",
+          "title": "Titular directo con el hecho o resultado concreto en español de Chile (máximo 85 caracteres)",
           "section": "${feed.defaultSection}",
-          "content": "Desarrollo completo de la noticia en 3 párrafos claros y bien redactados en español de Chile (mínimo 90 palabras en total)."
+          "content": "Desarrollo periodístico directo en 2 o 3 párrafos cortos, cargados de datos concretos y sin relleno."
         }
         Nota: En "section" usa solo uno de estos tres valores exactos: "chilenos", "superestrellas" o "torneos".
       `;
