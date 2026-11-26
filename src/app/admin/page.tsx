@@ -1,165 +1,231 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
-import { createClient } from "@supabase/supabase-js";
-import { cacheLife } from "next/cache";
-import WeeklyPoll from "@/components/WeeklyPoll";
-import Navbar from "@/components/Navbar/Navbar";
-import TodayMatchesWidget from "@/components/TodayMatchesWidget";
 
-interface Article {
+interface CommentRow {
   id: string;
-  title: string;
-  slug: string;
+  author_name: string;
   content: string;
-  sport: string;
-  section: string;
-  cover_image: string;
+  status: "pending" | "approved" | "rejected";
   created_at: string;
+  articles?: {
+    title: string;
+    slug: string;
+  } | null;
 }
 
-async function getPublishedArticles(): Promise<Article[]> {
-  "use cache";
-  cacheLife("minutes");
+export default function AdminPage() {
+  const [password, setPassword] = useState("");
+  const [authenticated, setAuthenticated] = useState(false);
+  const [comments, setComments] = useState<CommentRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    return [];
+  async function loadComments(passToUse: string) {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/comments", {
+        headers: { "x-admin-password": passToUse },
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error || "Contraseña incorrecta");
+        setAuthenticated(false);
+      } else {
+        setAuthenticated(true);
+        setComments(json.comments || []);
+      }
+    } catch {
+      setError("Error de conexión con el servidor");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  async function handleAction(id: string, action: "approve" | "delete") {
+    const res = await fetch("/api/admin/comments", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-password": password,
+      },
+      body: JSON.stringify({ id, action }),
+    });
 
-  const { data } = await supabase
-    .from("articles")
-    .select("*")
-    .eq("status", "published")
-    .order("created_at", { ascending: false })
-    .limit(12);
-
-  return data || [];
-}
-
-function getArticleCoverUrl(article: Article): string {
-  if (article.cover_image) {
-    return article.cover_image;
+    if (res.ok) {
+      if (action === "approve") {
+        setComments((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, status: "approved" } : c))
+        );
+      } else {
+        setComments((prev) => prev.filter((c) => c.id !== id));
+      }
+    }
   }
-  const params = new URLSearchParams({
-    title: article.title,
-    sport: article.sport || "football",
-    tag: article.section || "noticias",
-  });
-  return `/api/og?${params.toString()}`;
-}
 
-export default async function HomePage() {
-  const articles = await getPublishedArticles();
-  const featuredArticle = articles[0];
-  const restArticles = articles.slice(1);
+  if (!authenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            loadComments(password);
+          }}
+          className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-6 text-white shadow-xl"
+        >
+          <h1 className="mb-1 text-xl font-extrabold text-emerald-400">
+            Admin • Pasión Deportiva
+          </h1>
+          <p className="mb-5 text-xs text-slate-400">
+            Ingresa tu clave de administrador (CRON_SECRET o ADMIN_PASSWORD)
+          </p>
+
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Contraseña..."
+            className="mb-3 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
+            required
+          />
+
+          {error && <p className="mb-3 text-xs text-red-400">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-lg bg-emerald-600 py-2 text-sm font-bold text-white transition hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {loading ? "Verificando..." : "Entrar al Panel"}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  const pendingComments = comments.filter((c) => c.status === "pending");
+  const approvedComments = comments.filter((c) => c.status === "approved");
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Navbar />
-      <main className="mx-auto max-w-7xl space-y-6 px-4 py-8">
-        {/* Slider horizontal de marcadores y cartelera del día */}
-        <TodayMatchesWidget />
-
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-          <div className="space-y-8 lg:col-span-8">
-            {featuredArticle ? (
-              <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
-                <Link href={`/noticia/${featuredArticle.slug}`}>
-                  <div className="relative aspect-[1200/630] w-full bg-slate-900">
-                    <img
-                      src={getArticleCoverUrl(featuredArticle)}
-                      alt={featuredArticle.title}
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                  <div className="p-6 sm:p-8">
-                    <div className="mb-3 flex items-center gap-2">
-                      <span className="rounded-full bg-red-600 px-3 py-1 text-xs font-bold uppercase text-white">
-                        Destacada
-                      </span>
-                      <span className="text-xs font-bold uppercase text-slate-500">
-                        {featuredArticle.sport === "tennis" ? "Tenis" : "Fútbol"} •{" "}
-                        {featuredArticle.section}
-                      </span>
-                    </div>
-                    <h1 className="mb-3 text-2xl font-extrabold leading-tight text-slate-900 sm:text-3xl">
-                      {featuredArticle.title}
-                    </h1>
-                    <p className="line-clamp-3 text-base text-slate-600">
-                      {featuredArticle.content}
-                    </p>
-                  </div>
-                </Link>
-              </article>
-            ) : (
-              <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center">
-                <p className="text-slate-500">
-                  Aún no hay noticias publicadas. Entra a <strong>/admin</strong> y publica tu primera noticia.
-                </p>
-              </div>
-            )}
-
-            {restArticles.length > 0 && (
-              <section>
-                <h2 className="mb-4 text-xl font-bold text-slate-900">
-                  Últimas Noticias
-                </h2>
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                  {restArticles.map((article: Article) => (
-                    <article
-                      key={article.id}
-                      className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
-                    >
-                      <Link href={`/noticia/${article.slug}`} className="flex flex-1 flex-col">
-                        <div className="aspect-[1200/630] w-full bg-slate-900">
-                          <img
-                            src={getArticleCoverUrl(article)}
-                            alt={article.title}
-                            loading="lazy"
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-                        <div className="flex flex-1 flex-col justify-between p-5">
-                          <div>
-                            <span className="mb-2 inline-block text-xs font-bold uppercase text-red-600">
-                              {article.sport === "tennis" ? "Tenis" : "Fútbol"} • {article.section}
-                            </span>
-                            <h3 className="mb-2 text-lg font-bold leading-snug text-slate-900">
-                              {article.title}
-                            </h3>
-                          </div>
-                          <p className="line-clamp-2 text-sm text-slate-600">
-                            {article.content}
-                          </p>
-                        </div>
-                      </Link>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            )}
+    <div className="min-h-screen bg-slate-50 px-4 py-8">
+      <div className="mx-auto max-w-4xl space-y-6">
+        <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div>
+            <h1 className="text-xl font-extrabold text-slate-900">
+              Moderación de Comentarios
+            </h1>
+            <p className="text-xs text-slate-500">
+              {pendingComments.length} pendientes por aprobar •{" "}
+              {approvedComments.length} publicados
+            </p>
           </div>
-
-          <aside className="space-y-6 lg:col-span-4">
-            <WeeklyPoll />
-
-            <div className="rounded-2xl border border-slate-200 bg-slate-900 p-6 text-white">
-              <span className="mb-2 inline-block rounded bg-emerald-500/20 px-2.5 py-1 text-xs font-bold text-emerald-400">
-                100% SIN HUMO
-              </span>
-              <h3 className="mb-2 text-lg font-bold">
-                Información Deportiva Verificada
-              </h3>
-              <p className="text-sm text-slate-300">
-                Seguimiento en tiempo real a futbolistas y tenistas chilenos en el extranjero y las grandes figuras del deporte mundial.
-              </p>
-            </div>
-          </aside>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => loadComments(password)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Actualizar
+            </button>
+            <Link
+              href="/"
+              className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
+            >
+              Ver Portal
+            </Link>
+          </div>
         </div>
-      </main>
+
+        {/* Comentarios Pendientes */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-amber-600">
+            Pendientes de aprobación ({pendingComments.length})
+          </h2>
+
+          {pendingComments.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+              No hay comentarios pendientes por revisar.
+            </div>
+          ) : (
+            pendingComments.map((comment) => (
+              <div
+                key={comment.id}
+                className="flex flex-col justify-between gap-4 rounded-xl border border-amber-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-slate-900">
+                      {comment.author_name}
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      {new Date(comment.created_at).toLocaleString("es-CL")}
+                    </span>
+                  </div>
+                  {comment.articles?.title && (
+                    <p className="text-xs font-medium text-emerald-700">
+                      Noticia: {comment.articles.title}
+                    </p>
+                  )}
+                  <p className="text-sm text-slate-700">{comment.content}</p>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleAction(comment.id, "approve")}
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500"
+                  >
+                    Aprobar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAction(comment.id, "delete")}
+                    className="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-200"
+                  >
+                    Rechazar
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </section>
+
+        {/* Últimos Aprobados */}
+        {approvedComments.length > 0 && (
+          <section className="space-y-3 pt-4">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
+              Aprobados recientes ({approvedComments.length})
+            </h2>
+            {approvedComments.map((comment) => (
+              <div
+                key={comment.id}
+                className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4"
+              >
+                <div>
+                  <p className="text-xs font-bold text-slate-900">
+                    {comment.author_name}{" "}
+                    <span className="font-normal text-slate-400">
+                      • {comment.articles?.title || "Noticia"}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {comment.content}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleAction(comment.id, "delete")}
+                  className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+                >
+                  Eliminar
+                </button>
+              </div>
+            ))}
+          </section>
+        )}
+      </div>
     </div>
   );
 }
