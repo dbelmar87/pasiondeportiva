@@ -4,6 +4,7 @@ import WeeklyPoll from "@/components/WeeklyPoll";
 import Navbar from "@/components/Navbar/Navbar";
 import TodayMatchesWidget from "@/components/TodayMatchesWidget";
 import AtpRankingWidget from "@/components/AtpRankingWidget";
+import StandingsWidget from "@/components/StandingsWidget"
 import { Suspense } from "react";
 
 interface Article {
@@ -159,6 +160,7 @@ export default function HomePage() {
 
           <aside className="space-y-6 lg:col-span-4">
             <AtpRankingWidget />
+            <StandingsWidget />
             <WeeklyPoll />
           </aside>
         </div>
