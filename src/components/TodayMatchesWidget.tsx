@@ -558,7 +558,11 @@ export default function TodayMatchesWidget({
                     {item.isLive ? (
                       <span className="inline-flex shrink-0 items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">
                         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>
-                        EN CURSO
+                        {m.status_short === "HT"
+                          ? "ENTRET."
+                          : m.elapsed
+                          ? `${m.elapsed}'`
+                          : "EN VIVO"}
                       </span>
                     ) : item.isFinished ? (
                       <span className="shrink-0 font-semibold text-slate-400">FINAL</span>
@@ -569,7 +573,7 @@ export default function TodayMatchesWidget({
                     )}
                   </div>
 
-                  {/* Filas de equipos: marcador visible SOLO cuando finaliza */}
+                  {/* Filas de equipos: marcador visible EN VIVO y al FINALIZAR */}
                   <div className="space-y-1">
                     <div className="flex items-center justify-between gap-1.5">
                       <div className="flex min-w-0 items-center gap-1.5">
@@ -578,8 +582,12 @@ export default function TodayMatchesWidget({
                           {m.home_team}
                         </span>
                       </div>
-                      {item.isFinished && (
-                        <span className="shrink-0 text-xs font-bold text-slate-800">
+                      {(item.isLive || item.isFinished) && (
+                        <span
+                          className={`shrink-0 text-xs font-bold ${
+                            item.isLive ? "text-emerald-600" : "text-slate-800"
+                          }`}
+                        >
                           {m.home_score ?? 0}
                         </span>
                       )}
@@ -592,13 +600,18 @@ export default function TodayMatchesWidget({
                           {m.away_team}
                         </span>
                       </div>
-                      {item.isFinished && (
-                        <span className="shrink-0 text-xs font-bold text-slate-800">
+                      {(item.isLive || item.isFinished) && (
+                        <span
+                          className={`shrink-0 text-xs font-bold ${
+                            item.isLive ? "text-emerald-600" : "text-slate-800"
+                          }`}
+                        >
                           {m.away_score ?? 0}
                         </span>
                       )}
                     </div>
                   </div>
+
                 </div>
               );
             }
