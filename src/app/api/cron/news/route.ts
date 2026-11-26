@@ -72,11 +72,11 @@ function parseGoogleNewsRss(xml: string): RssItem[] {
   const itemMatches = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
 
   for (const itemXml of itemMatches) {
-    const rawTitle = itemXml.match(/<title>([\s\S]*?)<\/title>/)?. || "";
-    const link = itemXml.match(/<link>([\s\S]*?)<\/link>/)?.?.trim() || "";
-    const pubDate = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.?.trim() || "";
-    const rawDesc = itemXml.match(/<description>([\s\S]*?)<\/description>/)?. || "";
-    const rawSource = itemXml.match(/<source[^>]*>([\s\S]*?)<\/source>/)?. || "";
+    const rawTitle = itemXml.match(/<title>([\s\S]*?)<\/title>/)?.[1] || "";
+    const link = itemXml.match(/<link>([\s\S]*?)<\/link>/)?.[1]?.trim() || "";
+    const pubDate = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1]?.trim() || "";
+    const rawDesc = itemXml.match(/<description>([\s\S]*?)<\/description>/)?.[1] || "";
+    const rawSource = itemXml.match(/<source[^>]*>([\s\S]*?)<\/source>/)?.[1] || "";
 
     const cleanTitle = decodeXmlEntities(rawTitle).replace(/\s-\s[^-]+$/, "").trim();
     const sourceName = decodeXmlEntities(rawSource);
