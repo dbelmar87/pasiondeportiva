@@ -143,7 +143,9 @@ export default function HomePage() {
     <div className="min-h-screen bg-slate-50">
       <Navbar />
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-8">
-        <TodayMatchesWidget />
+      <TodayMatchesWidget
+        title="Partidos Destacados del Día"
+        maxItems={30}/>
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
           <Suspense
             fallback={
