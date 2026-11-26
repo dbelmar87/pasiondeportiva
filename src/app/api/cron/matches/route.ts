@@ -13,8 +13,10 @@ const ESPN_LEAGUES = [
   { slug: "fifa.world", id: 1, name: "Mundial", country: "Mundo", isImportant: true, filterBigClubs: false },
   { slug: "uefa.champions", id: 2, name: "UEFA Champions League", country: "Europa", isImportant: true, filterBigClubs: false },
 
+
   // Torneos europeos con muchos partidos simultáneos: filtramos clubes grandes + chilenos
   { slug: "uefa.europa", id: 3, name: "UEFA Europa League", country: "Europa", isImportant: true, filterBigClubs: true },
+  { slug: "uefa.europa.conf", id: 848, name: "UEFA Conference League", country: "Europa", isImportant: true, filterBigClubs: true },
   { slug: "eng.1", id: 39, name: "Premier League", country: "Inglaterra", isImportant: true, filterBigClubs: true },
   { slug: "esp.1", id: 140, name: "La Liga", country: "España", isImportant: true, filterBigClubs: true },
   { slug: "ita.1", id: 135, name: "Serie A", country: "Italia", isImportant: true, filterBigClubs: true },
