@@ -87,14 +87,6 @@ export default function FanDigitalCard({
               <span className="font-bold">{profile.favorite_player}</span>
             </div>
           )}
-          {profile.memorable_match && (
-            <div className="flex flex-col gap-1 pt-1">
-              <span className="text-slate-400">Partido inolvidable:</span>
-              <span className="italic text-slate-200">
-                &ldquo;{profile.memorable_match}&rdquo;
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Redes Sociales desbloqueadas solo tras verificar identidad */}
