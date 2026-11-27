@@ -78,3 +78,52 @@ export async function PATCH(req: NextRequest) {
 
   return NextResponse.json({ error: "Acción inválida" }, { status: 400 });
 }
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const articleId = String(body.article_id || body.articleId || "").trim();
+    const authorName = String(body.author_name || body.authorName || "").trim();
+    const content = String(body.content || "").trim();
+
+    if (!articleId || !authorName || !content) {
+      return NextResponse.json(
+        { error: "Nombre, comentario y artículo son obligatorios." },
+        { status: 400 }
+      );
+    }
+
+    if (authorName.length > 60 || content.length > 800) {
+      return NextResponse.json(
+        { error: "El nombre o el comentario exceden el largo permitido." },
+        { status: 400 }
+      );
+    }
+
+    const supabase = getAdminSupabase();
+
+    const { error } = await supabase.from("comments").insert({
+      article_id: articleId,
+      author_name: authorName,
+      content,
+      status: "pending", // Queda pendiente para que lo apruebes en /admin
+    });
+
+    if (error) {
+      return NextResponse.json(
+        { error: `Error guardando comentario: ${error.message}` },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      message: "¡Opinión enviada! Aparecerá en la noticia apenas sea aprobada.",
+    });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message || "Error inesperado al procesar el comentario." },
+      { status: 500 }
+    );
+  }
+}
