@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { fetchEspnStandings, TRACKED_LEAGUES } from "@/lib/espnStandings";
 
 const ESPN_LEAGUES = [
   // Torneos donde entran TODOS los partidos del día
@@ -13,7 +14,6 @@ const ESPN_LEAGUES = [
   { slug: "fifa.world", id: 1, name: "Mundial", country: "Mundo", isImportant: true, filterBigClubs: false },
   { slug: "uefa.champions", id: 2, name: "UEFA Champions League", country: "Europa", isImportant: true, filterBigClubs: false },
 
-
   // Torneos europeos con muchos partidos simultáneos: filtramos clubes grandes + chilenos
   { slug: "uefa.europa", id: 3, name: "UEFA Europa League", country: "Europa", isImportant: true, filterBigClubs: true },
   { slug: "uefa.europa.conf", id: 848, name: "UEFA Conference League", country: "Europa", isImportant: true, filterBigClubs: true },
@@ -21,13 +21,13 @@ const ESPN_LEAGUES = [
   { slug: "esp.1", id: 140, name: "La Liga", country: "España", isImportant: true, filterBigClubs: true },
   { slug: "ita.1", id: 135, name: "Serie A", country: "Italia", isImportant: true, filterBigClubs: true },
   { slug: "ger.1", id: 78, name: "Bundesliga", country: "Alemania", isImportant: true, filterBigClubs: true },
+  { slug: "fra.1", id: 61, name: "Ligue 1", country: "Francia", isImportant: true, filterBigClubs: true },
 
   // Ligas secundarias: solo clubes destacados (Al-Nassr, Inter Miami) o favoritos de usuarios
   { slug: "ksa.1", id: 307, name: "Saudi Pro League", country: "Arabia Saudita", isImportant: false, filterBigClubs: true },
   { slug: "usa.1", id: 253, name: "MLS", country: "Estados Unidos", isImportant: false, filterBigClubs: true },
   { slug: "arg.1", id: 128, name: "Liga Profesional Argentina", country: "Argentina", isImportant: false, filterBigClubs: true },
 ];
-
 
 // Todos los clubes de las 5 Grandes Ligas (Premier, LaLiga, Serie A, Bundesliga, Ligue 1) + Chilenos
 const FEATURED_AND_CHILEAN_CLUBS = [
@@ -67,7 +67,6 @@ const FEATURED_AND_CHILEAN_CLUBS = [
   "boca", "river", "racing", "independiente", "flamengo", "palmeiras", "chile"
 ];
 
-
 function getTodaySantiago(): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Santiago",
@@ -84,6 +83,23 @@ function makeShortName(name: string): string {
     return `${words[0][0]}${words[1].slice(0, 2)}`.toUpperCase();
   }
   return clean.slice(0, 3).toUpperCase() || "CLB";
+}
+
+function mapEspnStatus(state?: string, detail?: string): { short: string; long: string } {
+  const s = (state || "").toLowerCase();
+  const d = (detail || "").toLowerCase();
+  if (s === "post") {
+    if (d.includes("pen")) return { short: "PEN", long: "Finalizado (Penales)" };
+    if (d.includes("aet") || d.includes("extra")) return { short: "AET", long: "Finalizado (Prórroga)" };
+    return { short: "FT", long: "Finalizado" };
+  }
+  if (s === "in") {
+    if (d.includes("halftime") || d === "ht") return { short: "HT", long: "Entretiempo" };
+    return { short: "LIVE", long: detail || "En juego" };
+  }
+  if (d.includes("postponed")) return { short: "PST", long: "Pospuesto" };
+  if (d.includes("canceled") || d.includes("cancelled")) return { short: "CANC", long: "Cancelado" };
+  return { short: "NS", long: "Programado" };
 }
 
 export async function GET(request: NextRequest) {
@@ -148,6 +164,10 @@ export async function GET(request: NextRequest) {
     const activeLeagueIds = new Set(
       (activeMatches || []).map((m) => m.league_id)
     );
+    const previouslyActiveIds = new Set(
+      (activeMatches || []).map((m) => m.id)
+    );
+
     const leaguesToFetch = needsDailySync
       ? ESPN_LEAGUES
       : ESPN_LEAGUES.filter((l) => activeLeagueIds.has(l.id));
@@ -179,97 +199,73 @@ export async function GET(request: NextRequest) {
             cache: "no-store",
             headers: {
               "User-Agent": "Mozilla/5.0 (compatible; PasionDeportiva/1.0)",
+              Accept: "application/json",
             },
           });
 
           if (!res.ok) return;
-
-          const data = await res.json();
-          const leagueLogo = data?.leagues?.[0]?.logos?.[0]?.href || "";
-          const events = data?.events || [];
+          const json = await res.json();
+          const events = json.events || [];
           totalFetched += events.length;
 
           for (const ev of events) {
-            const matchIso = new Date(ev.date).toISOString();
-            if (matchIso < startOfDay || matchIso > endOfDay) continue;
-
             const comp = ev.competitions?.[0];
             const competitors = comp?.competitors || [];
-            const home =
-              competitors.find((c: any) => c.homeAway === "home") || competitors[0];
-            const away =
-              competitors.find((c: any) => c.homeAway === "away") || competitors[1];
-
+            const home = competitors.find((c: any) => c.homeAway === "home");
+            const away = competitors.find((c: any) => c.homeAway === "away");
             if (!home || !away) continue;
 
-            const homeName =
-              home.team?.shortDisplayName || home.team?.displayName || "Local";
-            const awayName =
-              away.team?.shortDisplayName || away.team?.displayName || "Visita";
-            const homeLower = homeName.toLowerCase();
-            const awayLower = awayName.toLowerCase();
+            const homeName: string = home.team?.displayName || home.team?.name || "";
+            const awayName: string = away.team?.displayName || away.team?.name || "";
 
-            const isFeaturedClub = FEATURED_AND_CHILEAN_CLUBS.some(
-              (club) => homeLower.includes(club) || awayLower.includes(club)
-            );
-            const isFollowedClub = Array.from(followedTeams).some(
-              (fav) => homeLower.includes(fav) || awayLower.includes(fav)
-            );
-
-            // Si la liga requiere filtro de clubes (ej. Europa League) o es secundaria, solo guardamos partidos destacados/seguidos
-            if (league.filterBigClubs && !isFeaturedClub && !isFollowedClub) {
-              continue;
+            if (league.filterBigClubs) {
+              const hLow = homeName.toLowerCase();
+              const aLow = awayName.toLowerCase();
+              const isBig = FEATURED_AND_CHILEAN_CLUBS.some(
+                (club) => hLow.includes(club) || aLow.includes(club)
+              );
+              const isFollowed = Array.from(followedTeams).some(
+                (fav) => hLow.includes(fav) || aLow.includes(fav)
+              );
+              if (!isBig && !isFollowed) continue;
             }
 
-            const state = ev.status?.type?.state; // "pre" | "in" | "post"
-            const statusName = ev.status?.type?.name || "";
-            let statusShort = "NS";
-            if (state === "in") {
-              statusShort = ev.status?.type?.shortDetail === "HT" ? "HT" : "LIVE";
-            } else if (state === "post") {
-              if (statusName.includes("POSTPONED")) statusShort = "PST";
-              else if (statusName.includes("CANCELED")) statusShort = "CANC";
-              else statusShort = "FT";
-            }
-
-            const clockStr = String(ev.status?.displayClock || "");
-            const elapsedMatch = clockStr.match(/^(\d+)/);
-            const elapsed =
-              state === "in" && elapsedMatch ? Number(elapsedMatch[1]) : null;
-
-            const numericId = Number(String(ev.id).replace(/\D/g, ""));
-            if (!numericId) continue;
+            const statusType = comp?.status?.type || ev.status?.type || {};
+            const mappedStatus = mapEspnStatus(
+              statusType.state,
+              statusType.shortDetail || statusType.detail
+            );
 
             rowsToUpsert.push({
-              home_logo: home.team?.logo || "",
-              away_logo: away.team?.logo || "",
-              league_logo: leagueLogo,
-              id: numericId,
+              id: Number(ev.id),
               league_id: league.id,
               league_name: league.name,
               league_country: league.country,
-              match_date: matchIso,
-              status_short: statusShort,
-              elapsed,
+              match_date: ev.date,
+              status_short: mappedStatus.short,
+              status_long: mappedStatus.long,
+              elapsed: comp?.status?.clock ? Math.floor(comp.status.clock / 60) : null,
               home_team: homeName,
-              home_short: (home.team?.abbreviation || makeShortName(homeName))
-                .slice(0, 4)
-                .toUpperCase(),
-              home_score: state === "pre" ? null : Number(home.score ?? 0),
+              home_short: home.team?.abbreviation || makeShortName(homeName),
+              home_logo: home.team?.logo || "",
+              home_goals:
+                statusType.state === "pre" ? null : Number(home.score ?? 0),
               away_team: awayName,
-              away_short: (away.team?.abbreviation || makeShortName(awayName))
-                .slice(0, 4)
-                .toUpperCase(),
-              away_score: state === "pre" ? null : Number(away.score ?? 0),
+              away_short: away.team?.abbreviation || makeShortName(awayName),
+              away_logo: away.team?.logo || "",
+              away_goals:
+                statusType.state === "pre" ? null : Number(away.score ?? 0),
               is_important: league.isImportant,
               updated_at: nowIso,
             });
           }
         } catch {
-          // Ignorar error individual de una liga para no detener las demás
+          // Ignorar fallo individual de liga para no detener las demás
         }
       })
     );
+
+    const updatedStandings: string[] = [];
 
     if (rowsToUpsert.length > 0) {
       const { error: upsertError } = await supabase
@@ -282,20 +278,58 @@ export async function GET(request: NextRequest) {
           { status: 500 }
         );
       }
+
+      // Detectar qué ligas tuvieron partidos que acaban de finalizar en esta ronda
+      const finishedLeagueSlugs = new Set<string>();
+
+      for (const row of rowsToUpsert) {
+        const isNowFinished = ["FT", "AET", "PEN"].includes(row.status_short);
+        if (isNowFinished && previouslyActiveIds.has(row.id)) {
+          const leagueMeta = ESPN_LEAGUES.find((l) => l.id === row.league_id);
+          if (
+            leagueMeta &&
+            TRACKED_LEAGUES.some((t) => t.slug === leagueMeta.slug)
+          ) {
+            finishedLeagueSlugs.add(leagueMeta.slug);
+          }
+        }
+      }
+
+      // Actualizar únicamente las tablas de las ligas con partidos recién terminados
+      for (const slug of finishedLeagueSlugs) {
+        try {
+          const leagueInfo = TRACKED_LEAGUES.find((t) => t.slug === slug);
+          const teams = await fetchEspnStandings(slug);
+          if (leagueInfo && teams.length > 0) {
+            await supabase.from("league_standings").upsert(
+              {
+                slug: leagueInfo.slug,
+                label: leagueInfo.label,
+                flag: leagueInfo.flag,
+                teams,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "slug" }
+            );
+            updatedStandings.push(slug);
+          }
+        } catch {
+          // Silencioso para no afectar la respuesta del cron de partidos
+        }
+      }
     }
 
     return NextResponse.json({
       ok: true,
-      provider: "ESPN",
-      mode: needsDailySync ? "daily" : "live",
-      date: todayStr,
-      leaguesChecked: leaguesToFetch.length,
-      totalFetched,
-      savedMatches: rowsToUpsert.length,
+      apiCallsUsed: leaguesToFetch.length,
+      totalEventsScanned: totalFetched,
+      matchesUpserted: rowsToUpsert.length,
+      updatedStandings,
     });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Error inesperado";
-    return NextResponse.json({ error: msg }, { status: 500 });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message || "Error inesperado en cron de partidos" },
+      { status: 500 }
+    );
   }
 }
-
