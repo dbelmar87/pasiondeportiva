@@ -82,32 +82,40 @@ export async function PATCH(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const articleId = String(body.article_id || body.articleId || "").trim();
-    const authorName = String(body.author_name || body.authorName || "").trim();
+    const articleId = String(body.articleId || body.article_id || "").trim();
+    const userId = body.userId ? String(body.userId).trim() : null;
+    const authorName = String(body.authorName || body.author_name || "").trim();
+    const authorTeam = body.authorTeam ? String(body.authorTeam).trim() : null;
     const content = String(body.content || "").trim();
 
     if (!articleId || !authorName || !content) {
       return NextResponse.json(
-        { error: "Nombre, comentario y artículo son obligatorios." },
+        { error: "Faltan datos obligatorios para publicar el comentario." },
         { status: 400 }
       );
     }
 
-    if (authorName.length > 60 || content.length > 800) {
+    if (content.length > 600) {
       return NextResponse.json(
-        { error: "El nombre o el comentario exceden el largo permitido." },
+        { error: "El comentario no puede superar los 600 caracteres." },
         { status: 400 }
       );
     }
 
     const supabase = getAdminSupabase();
 
-    const { error } = await supabase.from("comments").insert({
-      article_id: articleId,
-      author_name: authorName,
-      content,
-      status: "pending", // Queda pendiente para que lo apruebes en /admin
-    });
+    const { data: insertedComment, error } = await supabase
+      .from("article_comments")
+      .insert({
+        article_id: articleId,
+        user_id: userId,
+        author_name: authorName,
+        author_team: authorTeam,
+        content,
+        status: "approved",
+      })
+      .select("id, user_id, author_name, author_team, content, created_at")
+      .single();
 
     if (error) {
       return NextResponse.json(
@@ -118,7 +126,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      message: "¡Opinión enviada! Aparecerá en la noticia apenas sea aprobada.",
+      comment: insertedComment,
     });
   } catch (err: any) {
     return NextResponse.json(
@@ -127,3 +135,4 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
