@@ -16,10 +16,19 @@ interface CommentRow {
   } | null;
 }
 
+interface PollCandidate {
+  id: string;
+  athlete_name: string;
+  sport: string;
+  achievement: string;
+  votes: number;
+  avatar_url?: string;
+}
+
 export default function AdminPage() {
   const [password, setPassword] = useState("");
   const [authenticated, setAuthenticated] = useState(false);
-  const [activeTab, setActiveTab] = useState<"publish" | "comments">("publish");
+  const [activeTab, setActiveTab] = useState<"publish" | "poll" | "comments">("publish");
 
   // Estados de comentarios
   const [comments, setComments] = useState<CommentRow[]>([]);
@@ -38,6 +47,118 @@ export default function AdminPage() {
     type: "ok" | "error";
     text: string;
   } | null>(null);
+
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollSubtitle, setPollSubtitle] = useState("");
+  const [pollCandidates, setPollCandidates] = useState<PollCandidate[]>([]);
+  const [loadingPoll, setLoadingPoll] = useState(false);
+  const [savingPoll, setSavingPoll] = useState(false);
+  const [uploadingAvatarId, setUploadingAvatarId] = useState<string | null>(null);
+  const [pollFeedback, setPollFeedback] = useState<{
+    type: "ok" | "error";
+    text: string;
+  } | null>(null);
+
+  async function loadPollData() {
+    setLoadingPoll(true);
+    setPollFeedback(null);
+    try {
+      const res = await fetch("/api/admin/poll", {
+        headers: { "x-admin-password": password },
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setPollQuestion(json.settings?.question || "");
+        setPollSubtitle(json.settings?.subtitle || "");
+        setPollCandidates(json.candidates || []);
+      }
+    } finally {
+      setLoadingPoll(false);
+    }
+  }
+
+  async function handleAvatarUpload(candidateId: string, file: File | null) {
+    if (!file) return;
+    setUploadingAvatarId(candidateId);
+    try {
+      const supabase = createClient();
+      const fileExt = file.name.split(".").pop() || "jpg";
+      const fileName = `poll/${candidateId}-${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("news-images")
+        .upload(fileName, file, {
+          contentType: file.type || "image/jpeg",
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicData } = supabase.storage
+        .from("news-images")
+        .getPublicUrl(fileName);
+
+      setPollCandidates((prev) =>
+        prev.map((c) =>
+          c.id === candidateId ? { ...c, avatar_url: publicData.publicUrl } : c
+        )
+      );
+    } catch (err: any) {
+      setPollFeedback({
+        type: "error",
+        text: `Error subiendo avatar: ${err?.message || "Intenta nuevamente"}`,
+      });
+    } finally {
+      setUploadingAvatarId(null);
+    }
+  }
+
+  async function handleSavePoll(resetVotes = false) {
+    setSavingPoll(true);
+    setPollFeedback(null);
+    try {
+      const res = await fetch("/api/admin/poll", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-password": password,
+        },
+        body: JSON.stringify({
+          question: pollQuestion,
+          subtitle: pollSubtitle,
+          candidates: pollCandidates,
+          resetVotes,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setPollFeedback({
+          type: "error",
+          text: json.error || "No se pudo guardar la encuesta",
+        });
+      } else {
+        if (resetVotes) {
+          setPollCandidates((prev) => prev.map((c) => ({ ...c, votes: 0 })));
+        }
+        setPollFeedback({
+          type: "ok",
+          text: resetVotes
+            ? "¡Nueva encuesta publicada y votos reiniciados a 0!"
+            : "¡Cambios guardados en la votación!",
+        });
+      }
+    } catch {
+      setPollFeedback({
+        type: "error",
+        text: "Error de conexión al guardar la encuesta",
+      });
+    } finally {
+      setSavingPoll(false);
+    }
+  }
+
+
+
 
   async function loadComments(passToUse: string) {
     setLoading(true);
@@ -243,6 +364,22 @@ export default function AdminPage() {
             >
               ✍️ Publicar Noticia
             </button>
+            
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("poll");
+                if (pollCandidates.length === 0) loadPollData();
+              }}
+              className={`rounded-lg px-3.5 py-2 text-xs font-bold transition ${
+                activeTab === "poll"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              }`}
+            >
+              📊 Votación
+            </button>
+            
             <button
               type="button"
               onClick={() => setActiveTab("comments")}
@@ -397,6 +534,206 @@ export default function AdminPage() {
               {publishing ? "Publicando noticia..." : "Publicar en Portada"}
             </button>
           </form>
+        )}
+
+                {/* PESTAÑA: EDITAR VOTACIÓN EN VIVO */}
+                {activeTab === "poll" && (
+          <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-extrabold text-slate-900">
+                  Editar Votación en Vivo
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Modifica la pregunta, sube las fotos de los deportistas o inicia una encuesta nueva.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={loadPollData}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Recargar
+              </button>
+            </div>
+
+            {loadingPoll ? (
+              <div className="py-10 text-center text-sm text-slate-500">
+                Cargando encuesta actual...
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase text-slate-700">
+                      Pregunta de la encuesta
+                    </label>
+                    <input
+                      type="text"
+                      value={pollQuestion}
+                      onChange={(e) => setPollQuestion(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase text-slate-700">
+                      Subtítulo / Bajada
+                    </label>
+                    <input
+                      type="text"
+                      value={pollSubtitle}
+                      onChange={(e) => setPollSubtitle(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Lista de Candidatos */}
+                <div className="space-y-4 pt-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Candidatos ({pollCandidates.length})
+                  </h3>
+
+                  {pollCandidates.map((candidate, index) => (
+                    <div
+                      key={candidate.id}
+                      className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4 sm:flex-row sm:items-center"
+                    >
+                      {/* Vista previa y subida de avatar */}
+                      <div className="flex items-center gap-3 shrink-0">
+                        {candidate.avatar_url ? (
+                          <img
+                            src={candidate.avatar_url}
+                            alt={candidate.athlete_name}
+                            className="h-14 w-14 rounded-full border border-slate-300 object-cover bg-white"
+                          />
+                        ) : (
+                          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-sm font-extrabold text-emerald-700">
+                            #{index + 1}
+                          </div>
+                        )}
+                        <label className="cursor-pointer rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-100">
+                          {uploadingAvatarId === candidate.id
+                            ? "Subiendo..."
+                            : "📷 Subir foto"}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={uploadingAvatarId === candidate.id}
+                            onChange={(e) =>
+                              handleAvatarUpload(
+                                candidate.id,
+                                e.target.files?.[0] || null
+                              )
+                            }
+                          />
+                        </label>
+                      </div>
+
+                      {/* Campos editables del deportista */}
+                      <div className="grid flex-1 grid-cols-1 gap-2.5 sm:grid-cols-3">
+                        <input
+                          type="text"
+                          value={candidate.athlete_name}
+                          onChange={(e) =>
+                            setPollCandidates((prev) =>
+                              prev.map((c) =>
+                                c.id === candidate.id
+                                  ? { ...c, athlete_name: e.target.value }
+                                  : c
+                              )
+                            )
+                          }
+                          placeholder="Nombre deportista"
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-900 outline-none focus:border-emerald-500"
+                        />
+
+                        <select
+                          value={candidate.sport}
+                          onChange={(e) =>
+                            setPollCandidates((prev) =>
+                              prev.map((c) =>
+                                c.id === candidate.id
+                                  ? { ...c, sport: e.target.value }
+                                  : c
+                              )
+                            )
+                          }
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 outline-none focus:border-emerald-500"
+                        >
+                          <option value="FÚTBOL">FÚTBOL</option>
+                          <option value="TENIS">TENIS</option>
+                        </select>
+
+                        <input
+                          type="text"
+                          value={candidate.achievement}
+                          onChange={(e) =>
+                            setPollCandidates((prev) =>
+                              prev.map((c) =>
+                                c.id === candidate.id
+                                  ? { ...c, achievement: e.target.value }
+                                  : c
+                              )
+                            )
+                          }
+                          placeholder="Logro destacado (ej: Gol en Europa)"
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <span className="shrink-0 text-xs font-bold text-slate-500">
+                        {candidate.votes} votos
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {pollFeedback && (
+                  <div
+                    className={`rounded-xl p-3 text-xs font-semibold ${
+                      pollFeedback.type === "ok"
+                        ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border border-red-200 bg-red-50 text-red-700"
+                    }`}
+                  >
+                    {pollFeedback.text}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+                  <button
+                    type="button"
+                    disabled={savingPoll}
+                    onClick={() => handleSavePoll(false)}
+                    className="flex-1 rounded-xl bg-emerald-600 py-3 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-500 disabled:opacity-50"
+                  >
+                    {savingPoll
+                      ? "Guardando..."
+                      : "Guardar cambios (mantener votos)"}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={savingPoll}
+                    onClick={() => {
+                      if (
+                        confirm(
+                          "¿Seguro que quieres reiniciar todos los votos a 0 y lanzar esta encuesta como nueva?"
+                        )
+                      ) {
+                        handleSavePoll(true);
+                      }
+                    }}
+                    className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800 transition hover:bg-amber-100 disabled:opacity-50"
+                  >
+                    🔄 Nueva encuesta (Reiniciar votos a 0)
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         )}
 
         {/* PESTAÑA 2: MODERACIÓN DE COMENTARIOS */}
