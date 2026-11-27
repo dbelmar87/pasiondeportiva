@@ -82,7 +82,7 @@ export default function AdminPage() {
   }
 
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?. || null;
+    const file = e.target.files?.[0] || null;
     setImageFile(file);
     if (file) {
       setPreviewUrl(URL.createObjectURL(file));
