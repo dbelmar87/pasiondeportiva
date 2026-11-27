@@ -37,10 +37,13 @@ export async function rejectArticle(id: string) {
 
 export async function createManualArticle(formData: FormData) {
   const supabaseAdmin = getSupabaseAdmin();
-  const title = formData.get("title") as string;
-  const sport = formData.get("sport") as string;
-  const section = formData.get("section") as string;
-  const content = formData.get("content") as string;
+  const title = String(formData.get("title") || "").trim();
+  const sport = String(formData.get("sport") || "football").trim(); // "football" | "tennis"
+  const section = String(formData.get("section") || "chilenos").trim(); // "chilenos" | "superestrellas" | "torneos"
+  const content = String(formData.get("content") || "").trim();
+  const imageFile = formData.get("image_file") as File | null;
+
+  if (!title || !content) return;
 
   const slug = title
     .toLowerCase()
@@ -49,11 +52,38 @@ export async function createManualArticle(formData: FormData) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)+/g, "");
 
-  const coverImage = `/api/og?title=${encodeURIComponent(title)}&sport=${encodeURIComponent(sport)}&tag=${encodeURIComponent(section)}`;
+  const uniqueSlug = `${slug}-${Date.now().toString().slice(-4)}`;
+
+  // Imagen por defecto (/api/og) si no se adjunta foto
+  let coverImage = `/api/og?title=${encodeURIComponent(title)}&sport=${encodeURIComponent(sport)}&tag=${encodeURIComponent(section)}`;
+
+  // Si el usuario adjuntó una imagen válida, subirla a Supabase Storage
+  if (imageFile && imageFile.size > 0) {
+    const fileExt = imageFile.name.split(".").pop() || "jpg";
+    const filePath = `manual/${uniqueSlug}.${fileExt}`;
+    const arrayBuffer = await imageFile.arrayBuffer();
+
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from("news-images")
+      .upload(filePath, arrayBuffer, {
+        contentType: imageFile.type || "image/jpeg",
+        upsert: true,
+      });
+
+    if (!uploadError) {
+      const { data: publicData } = supabaseAdmin.storage
+        .from("news-images")
+        .getPublicUrl(filePath);
+
+      if (publicData?.publicUrl) {
+        coverImage = publicData.publicUrl;
+      }
+    }
+  }
 
   await supabaseAdmin.from("articles").insert({
     title,
-    slug: `${slug}-${Date.now().toString().slice(-4)}`,
+    slug: uniqueSlug,
     content,
     sport,
     section,
@@ -65,6 +95,7 @@ export async function createManualArticle(formData: FormData) {
   revalidatePath("/admin");
   revalidatePath("/");
 }
+
 
 export async function deleteReportedComment(commentId: string) {
   const supabaseAdmin = createClient(
