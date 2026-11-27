@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase-browser";
 
 interface CommentRow {
   id: string;
@@ -97,27 +98,62 @@ export default function AdminPage() {
     setPublishFeedback(null);
 
     try {
-      const formData = new FormData();
-      formData.append("title", title);
-      formData.append("sport", sport);
-      formData.append("section", section);
-      formData.append("content", content);
+      let coverImageUrl = "";
+
+      // 1. Subir imagen directamente a Supabase Storage si se adjuntó archivo
       if (imageFile) {
-        formData.append("image_file", imageFile);
+        const supabase = createClient();
+        const fileExt = imageFile.name.split(".").pop() || "jpg";
+        const fileName = `manual/${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 7)}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("news-images")
+          .upload(fileName, imageFile, {
+            contentType: imageFile.type || "image/jpeg",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          throw new Error(`Error subiendo imagen: ${uploadError.message}`);
+        }
+
+        const { data: publicData } = supabase.storage
+          .from("news-images")
+          .getPublicUrl(fileName);
+
+        coverImageUrl = publicData.publicUrl;
       }
 
+      // 2. Guardar la noticia en la base de datos vía API
       const res = await fetch("/api/admin/articles", {
         method: "POST",
-        headers: { "x-admin-password": password },
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-password": password,
+        },
+        body: JSON.stringify({
+          title,
+          sport,
+          section,
+          content,
+          cover_image: coverImageUrl,
+        }),
       });
 
-      const json = await res.json();
+      const rawText = await res.text();
+      let json: any = {};
+      try {
+        json = JSON.parse(rawText);
+      } catch {
+        throw new Error(`HTTP ${res.status}: ${rawText.slice(0, 120)}`);
+      }
 
       if (!res.ok) {
         setPublishFeedback({
           type: "error",
-          text: json.error || "No se pudo publicar la noticia",
+          text: json.error || `No se pudo publicar la noticia (HTTP ${res.status})`,
         });
       } else {
         setPublishFeedback({
@@ -129,10 +165,10 @@ export default function AdminPage() {
         setImageFile(null);
         setPreviewUrl(null);
       }
-    } catch {
+    } catch (err: any) {
       setPublishFeedback({
         type: "error",
-        text: "Error de red al intentar publicar",
+        text: err?.message || "Error de red al intentar publicar",
       });
     } finally {
       setPublishing(false);
@@ -262,7 +298,7 @@ export default function AdminPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-bold uppercase text-slate-700">
-                  Deporte *
+                Deporte *
                 </label>
                 <select
                   value={sport}
@@ -287,7 +323,7 @@ export default function AdminPage() {
                   }
                   className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-emerald-500"
                 >
-                                    <option value="chilenos">🇨🇱 Chilenos (Legión / Nacional)</option>
+                  <option value="chilenos">🇨🇱 Chilenos (Legión / Nacional)</option>
                   <option value="superestrellas">⭐ Superestrellas</option>
                   <option value="torneos">🏆 Grandes Torneos</option>
                 </select>
