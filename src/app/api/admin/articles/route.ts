@@ -47,15 +47,14 @@ export async function POST(request: NextRequest) {
       )}&tag=${encodeURIComponent(section)}`;
 
     const { error: insertError } = await supabaseAdmin.from("articles").insert({
-      title,
-      slug: uniqueSlug,
-      content,
-      sport,
-      section,
-      source_name: "Redacción Pasión Deportiva",
-      cover_image: coverImage,
-      status: "published",
-      featured: true,
+        title,
+        slug: uniqueSlug,
+        content,
+        sport,
+        section,
+        cover_image: coverImage,
+        status: "published",
+        featured: true,
     });
 
     if (insertError) {
